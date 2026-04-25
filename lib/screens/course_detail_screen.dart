@@ -224,15 +224,36 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       color: _selectedColor,
     );
 
-    await context.read<CourseProvider>().updateCourse(updated);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('修改成功！')));
-      Navigator.pop(context);
+    final provider = context.read<CourseProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await provider.updateCourse(updated);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('✅ ${updated.name} 修改成功'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('修改失败: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
   Future<void> _deleteCourse() async {
+    final provider = context.read<CourseProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -246,8 +267,26 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     );
 
     if (confirm == true && mounted) {
-      await context.read<CourseProvider>().deleteCourse(_course.id);
-      Navigator.pop(context);
+      try {
+        await provider.deleteCourse(_course.id);
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('🗑️ ${_course.name} 已删除'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (mounted) Navigator.pop(context);
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text('删除失败: $e'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 }

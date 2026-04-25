@@ -185,13 +185,28 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       isRecurring: _isRecurring,
     );
 
-    await context.read<CourseProvider>().addCourse(course);
-    
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('添加成功！')),
+    final provider = context.read<CourseProvider>();
+    final messenger = ScaffoldMessenger.of(context);
+
+    try {
+      await provider.addCourse(course);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('✅ ${course.name} 添加成功'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
       );
-      Navigator.pop(context);
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('添加失败: $e'),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 }
