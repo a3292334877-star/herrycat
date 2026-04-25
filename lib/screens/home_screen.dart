@@ -161,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text('今天没课～', style: TextStyle(color: Colors.grey[600])),
+            Text('这天没课～', style: TextStyle(color: Colors.grey[600])),
           ],
         ),
       );

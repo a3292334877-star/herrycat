@@ -30,6 +30,14 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   final List<String> _dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
   @override
+  void dispose() {
+    _nameController.dispose();
+    _teacherController.dispose();
+    _locationController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
