@@ -53,7 +53,7 @@ class _HomeScreenState extends State<HomeScreen>
           ),
         ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(96),
+          preferredSize: Size.fromHeight(_weeklyGridMode ? 48 : 96),
           child: Column(
             children: [
               Padding(
@@ -85,21 +85,22 @@ class _HomeScreenState extends State<HomeScreen>
                   onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
                 ),
               ),
-              SizedBox(
-                height: 40,
-                child: TabBar(
-                  controller: _tabController,
-                  isScrollable: true,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.grey[500],
-                  indicatorColor: colorScheme.primary,
-                  indicatorWeight: 3,
-                  dividerColor: Colors.transparent,
-                  tabAlignment: TabAlignment.start,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+              if (!_weeklyGridMode)
+                SizedBox(
+                  height: 40,
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey[500],
+                    indicatorColor: colorScheme.primary,
+                    indicatorWeight: 3,
+                    dividerColor: Colors.transparent,
+                    tabAlignment: TabAlignment.start,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+                  ),
                 ),
-              ),
             ],
           ),
         ),
