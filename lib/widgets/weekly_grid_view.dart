@@ -13,8 +13,8 @@ class WeeklyGridView extends StatelessWidget {
   static const int _dayEndMin   = 20 * 60 + 30; // 1230
   static const int _totalMin    = _dayEndMin - _dayStartMin; // 720
 
-  // Container height = 12 hours × 55 px/h = 660 px total
-  static const double _containerH = 660.0;
+  // Container height = 12 hours × 45 px/h = 540 px total
+  static const double _containerH = 540.0;
 
   static double _minToPx(int min) =>
       ((min - _dayStartMin) / _totalMin) * _containerH;

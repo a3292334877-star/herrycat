@@ -20,7 +20,6 @@ class _HomeScreenState extends State<HomeScreen>
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
   bool _weeklyGridMode = true;
-  int _currentNavIndex = 0;
 
   @override
   void initState() {
@@ -37,122 +36,134 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
       backgroundColor: const Color(0xFF1C1E21),
-      appBar: _currentNavIndex == 0 ? _buildAppBar() : null,
-      bottomNavigationBar: _BottomNav(
-        currentIndex: _currentNavIndex,
-        onTap: (i) => setState(() => _currentNavIndex = i),
-      ),
-      floatingActionButton: _currentNavIndex == 0
-          ? Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: const Color(0xFF5B9BF5).withOpacity(0.9),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF5B9BF5).withOpacity(0.4),
-                    blurRadius: 12,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: FloatingActionButton(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                onPressed: () => Navigator.pushNamed(context, '/add'),
-                child: const Icon(Icons.add, color: Colors.white, size: 26),
-              ),
-            )
-          : null,
-      body: _buildBody(),
-    );
-  }
-
-  PreferredSizeWidget _buildAppBar() {
-    return PreferredSize(
-      preferredSize: Size.fromHeight(_weeklyGridMode ? 48 : 96),
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: TextField(
-              controller: _searchController,
-              style: const TextStyle(color: Colors.white),
-              decoration: InputDecoration(
-                hintText: '搜索课程...',
-                hintStyle: TextStyle(color: Colors.grey[500]),
-                prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: Icon(Icons.clear, color: Colors.grey[500]),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: const Color(0xFF2C2E33),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              ),
-              onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
-            ),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1C1E21),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          '📚 课程表',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
           ),
-          if (!_weeklyGridMode)
-            SizedBox(
-              height: 40,
-              child: TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.grey[500],
-                indicatorColor: const Color(0xFF5B9BF5),
-                indicatorWeight: 3,
-                dividerColor: Colors.transparent,
-                tabAlignment: TabAlignment.start,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+        ),
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(_weeklyGridMode ? 48 : 96),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: TextField(
+                  controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: '搜索课程...',
+                    hintStyle: TextStyle(color: Colors.grey[500]),
+                    prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                            icon: Icon(Icons.clear, color: Colors.grey[500]),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    filled: true,
+                    fillColor: const Color(0xFF2C2E33),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  ),
+                  onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
+                ),
               ),
-            ),
+              if (!_weeklyGridMode)
+                SizedBox(
+                  height: 40,
+                  child: TabBar(
+                    controller: _tabController,
+                    isScrollable: true,
+                    labelColor: Colors.white,
+                    unselectedLabelColor: Colors.grey[500],
+                    indicatorColor: colorScheme.primary,
+                    indicatorWeight: 3,
+                    dividerColor: Colors.transparent,
+                    tabAlignment: TabAlignment.start,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(_weeklyGridMode ? Icons.view_list : Icons.grid_view, color: Colors.white),
+            tooltip: _weeklyGridMode ? '切换列表' : '切换周视图',
+            onPressed: () => setState(() => _weeklyGridMode = !_weeklyGridMode),
+          ),
+          IconButton(
+            icon: const Icon(Icons.bar_chart, color: Colors.white),
+            onPressed: () => Navigator.pushNamed(context, '/statistics'),
+          ),
+          IconButton(
+            icon: const Icon(Icons.download, color: Colors.white),
+            tooltip: '导入课表',
+            onPressed: _importSchedule,
+          ),
+          IconButton(
+            icon: const Icon(Icons.share, color: Colors.white),
+            onPressed: _shareSchedule,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings, color: Colors.white),
+            onPressed: () => Navigator.pushNamed(context, '/settings'),
+          ),
         ],
       ),
-    );
-  }
+      body: Consumer<CourseProvider>(
+        builder: (context, provider, child) {
+          if (provider.isLoading) {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
 
-  Widget _buildBody() {
-    if (_currentNavIndex != 0) {
-      return const SizedBox.shrink();
-    }
-    return Consumer<CourseProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (_searchQuery.isNotEmpty) {
-          final results = provider.courses
-              .where((c) => c.name.toLowerCase().contains(_searchQuery))
-              .toList();
-          return _buildSearchResults(results);
-        }
-        if (_weeklyGridMode) {
-          return const WeeklyGridView();
-        }
-        return TabBarView(
-          controller: _tabController,
-          children: List.generate(7, (index) {
-            final day = index + 1;
-            final courses = provider.getCoursesForDay(day);
-            return _buildCourseList(courses);
-          }),
-        );
-      },
+          if (_searchQuery.isNotEmpty) {
+            final results = provider.courses
+                .where((c) => c.name.toLowerCase().contains(_searchQuery))
+                .toList();
+            return _buildSearchResults(results);
+          }
+
+          if (_weeklyGridMode) {
+            return const WeeklyGridView();
+          }
+
+          return TabBarView(
+            controller: _tabController,
+            children: List.generate(7, (index) {
+              final day = index + 1;
+              final courses = provider.getCoursesForDay(day);
+              return _buildCourseList(courses, day);
+            }),
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: colorScheme.primary,
+        foregroundColor: Colors.white,
+        onPressed: () => Navigator.pushNamed(context, '/add'),
+        child: const Icon(Icons.add),
+      ),
     );
   }
 
@@ -164,7 +175,10 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text('没有找到"$_searchQuery"相关的课程', style: TextStyle(color: Colors.grey[500])),
+            Text(
+              '没有找到"$_searchQuery"相关的课程',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
@@ -172,15 +186,18 @@ class _HomeScreenState extends State<HomeScreen>
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: courses.length,
-      itemBuilder: (context, i) => CourseCard(
-        course: courses[i],
-        onTap: () => _showCourseDetail(courses[i]),
-        onLongPress: () => _showSwapDialog(courses[i]),
-      ),
+      itemBuilder: (context, i) {
+        final course = courses[i];
+        return CourseCard(
+          course: course,
+          onTap: () => _showCourseDetail(course),
+          onLongPress: () => _showSwapDialog(course),
+        );
+      },
     );
   }
 
-  Widget _buildCourseList(List<Course> courses) {
+  Widget _buildCourseList(List<Course> courses, int day) {
     if (courses.isEmpty) {
       return Center(
         child: Column(
@@ -188,7 +205,10 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Icon(Icons.event_available, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text('这天没课～', style: TextStyle(color: Colors.grey[500])),
+            Text(
+              '这天没课～',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
@@ -196,11 +216,14 @@ class _HomeScreenState extends State<HomeScreen>
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: courses.length,
-      itemBuilder: (context, i) => CourseCard(
-        course: courses[i],
-        onTap: () => _showCourseDetail(courses[i]),
-        onLongPress: () => _showSwapDialog(courses[i]),
-      ),
+      itemBuilder: (context, i) {
+        final course = courses[i];
+        return CourseCard(
+          course: course,
+          onTap: () => _showCourseDetail(course),
+          onLongPress: () => _showSwapDialog(course),
+        );
+      },
     );
   }
 
@@ -252,8 +275,9 @@ class _HomeScreenState extends State<HomeScreen>
   void _shareSchedule() {
     final provider = context.read<CourseProvider>();
     final buffer = StringBuffer();
-    buffer.writeln('📚 Henrycat 课程表');
+    buffer.writeln('📚 Herrycat 课程表');
     buffer.writeln('================');
+
     final dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     for (int day = 1; day <= 7; day++) {
       final courses = provider.getCoursesForDay(day);
@@ -266,7 +290,8 @@ class _HomeScreenState extends State<HomeScreen>
         }
       }
     }
-    Share.share(buffer.toString(), subject: 'Henrycat 课程表');
+
+    Share.share(buffer.toString(), subject: 'Herrycat 课程表');
   }
 
   Future<void> _importSchedule() async {
@@ -274,70 +299,11 @@ class _HomeScreenState extends State<HomeScreen>
     if (result == true && mounted) {
       context.read<CourseProvider>().loadCourses();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('✨ 课表导入成功！'), behavior: SnackBarBehavior.floating),
+        const SnackBar(
+          content: Text('✨ 课表导入成功！'),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     }
-  }
-}
-
-// ── Bottom Navigation Bar ─────────────────────────────────────────────────────
-class _BottomNav extends StatelessWidget {
-  final int currentIndex;
-  final Function(int) onTap;
-
-  const _BottomNav({required this.currentIndex, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1E21),
-        border: Border(top: BorderSide(color: Colors.grey[850]!, width: 0.5)),
-      ),
-      child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(icon: Icons.home_rounded, label: '首页', isSelected: currentIndex == 0, onTap: () => onTap(0)),
-            _NavItem(icon: Icons.bar_chart_rounded, label: '统计', isSelected: currentIndex == 1, onTap: () => onTap(1)),
-            _NavItem(icon: Icons.download_rounded, label: '导入', isSelected: currentIndex == 2, onTap: () => onTap(2)),
-            _NavItem(icon: Icons.settings_rounded, label: '设置', isSelected: currentIndex == 3, onTap: () => onTap(3)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NavItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _NavItem({required this.icon, required this.label, required this.isSelected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isSelected ? const Color(0xFF5B9BF5) : Colors.grey[600]!;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: SizedBox(
-        width: 60,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: TextStyle(color: color, fontSize: 10, fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
