@@ -13,8 +13,8 @@ class WeeklyGridView extends StatelessWidget {
   static const int _dayEndMin   = 20 * 60 + 30; // 1230
   static const int _totalMin    = _dayEndMin - _dayStartMin; // 720
 
-  // Container height = 12 hours × 60 px/h = 720 px total
-  static const double _containerH = 720.0;
+  // Container height = 12 hours × 55 px/h = 660 px total
+  static const double _containerH = 660.0;
 
   static double _minToPx(int min) =>
       ((min - _dayStartMin) / _totalMin) * _containerH;
@@ -139,10 +139,10 @@ class WeeklyGridView extends StatelessWidget {
       height: 30,
       child: Row(
         children: [
-          const SizedBox(width: 50, height: 30),
+          const SizedBox(width: 42, height: 24),
           ...List.generate(7, (i) => SizedBox(
             width: colW,
-            height: 30,
+            height: 24,
             child: Center(child: Text(dayNames[i], style: TextStyle(color: Colors.grey[400], fontSize: 10, fontWeight: FontWeight.w600))),
           )),
         ],
@@ -155,7 +155,7 @@ class WeeklyGridView extends StatelessWidget {
       children: [
         // Time column
         SizedBox(
-          width: 50,
+          width: 42,
           height: _containerH,
           child: Stack(
             children: [
