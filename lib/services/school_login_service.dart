@@ -196,15 +196,16 @@ class SchoolLoginService {
       headers: {
         'Cookie': 'JSESSIONID=$_jsessionId; EMAP_LANG=zh',
         'X-Requested-With': 'XMLHttpRequest',
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json; charset=UTF-8',
+        'Accept': 'application/json',
         'Referer': 'https://jwxt.szpu.edu.cn/jwapp/sys/kcbcxmdl/*default/index.do',
       },
-      body: {
+      body: jsonEncode({
         'XNXQDM': '2025-2026-2',
         '*json': '1',
         'querySetting': querySetting,
         '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
-      },
+      }),
     ).timeout(const Duration(seconds: 30));
 
     if (resp.statusCode != 200) {
