@@ -137,7 +137,9 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           items: List.generate(7, (i) => i + 1)
               .map((d) => DropdownMenuItem(value: d, child: Text(_dayNames[d])))
               .toList(),
-          onChanged: (v) => setState(() => _selectedDay = v!),
+          onChanged: (v) {
+            if (v != null) setState(() => _selectedDay = v);
+          },
         ),
         const SizedBox(height: 16),
         Row(

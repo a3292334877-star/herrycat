@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/course_model.dart';
 import '../services/notification_service.dart';
+import 'settings_provider.dart';
 
 class CourseProvider extends ChangeNotifier {
   List<Course> _courses = [];
@@ -58,7 +59,10 @@ class CourseProvider extends ChangeNotifier {
     _courses = maps.map((m) => Course.fromMap(m)).toList();
 
     final reminderMinutes = await _getReminderMinutes();
-    await _notificationService.rescheduleAllCourses(_courses, reminderMinutes);
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('notifications_enabled') ?? true) {
+      await _notificationService.rescheduleAllCourses(_courses, reminderMinutes);
+    }
 
     _isLoading = false;
     notifyListeners();
@@ -68,8 +72,11 @@ class CourseProvider extends ChangeNotifier {
     await _initDB();
     await _db!.insert('courses', course.toMap());
     _courses.add(course);
-    final reminderMinutes = await _getReminderMinutes();
-    await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool('notifications_enabled') ?? true) {
+      final reminderMinutes = await _getReminderMinutes();
+      await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+    }
     notifyListeners();
   }
 
@@ -84,9 +91,12 @@ class CourseProvider extends ChangeNotifier {
     final index = _courses.indexWhere((c) => c.id == course.id);
     if (index != -1) {
       _courses[index] = course;
-      await _notificationService.cancelNotification(course.id);
-      final reminderMinutes = await _getReminderMinutes();
-      await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('notifications_enabled') ?? true) {
+        await _notificationService.cancelNotification(course.id);
+        final reminderMinutes = await _getReminderMinutes();
+        await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+      }
       notifyListeners();
     }
   }
