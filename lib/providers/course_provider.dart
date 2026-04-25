@@ -4,7 +4,6 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/course_model.dart';
 import '../services/notification_service.dart';
-import 'settings_provider.dart';
 
 class CourseProvider extends ChangeNotifier {
   List<Course> _courses = [];
@@ -53,15 +52,20 @@ class CourseProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
 
-    await _initDB();
-    await _notificationService.initialize();
-    final maps = await _db!.query('courses');
-    _courses = maps.map((m) => Course.fromMap(m)).toList();
+    try {
+      await _initDB();
+      await _notificationService.initialize();
+      final maps = await _db!.query('courses');
+      _courses = maps.map((m) => Course.fromMap(m)).toList();
 
-    final reminderMinutes = await _getReminderMinutes();
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('notifications_enabled') ?? true) {
-      await _notificationService.rescheduleAllCourses(_courses, reminderMinutes);
+      final reminderMinutes = await _getReminderMinutes();
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('notifications_enabled') ?? true) {
+        await _notificationService.rescheduleAllCourses(_courses, reminderMinutes);
+      }
+    } catch (e) {
+      debugPrint('loadCourses error: $e');
+      // Fall through with empty courses on error
     }
 
     _isLoading = false;
@@ -72,10 +76,14 @@ class CourseProvider extends ChangeNotifier {
     await _initDB();
     await _db!.insert('courses', course.toMap());
     _courses.add(course);
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('notifications_enabled') ?? true) {
-      final reminderMinutes = await _getReminderMinutes();
-      await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool('notifications_enabled') ?? true) {
+        final reminderMinutes = await _getReminderMinutes();
+        await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+      }
+    } catch (e) {
+      debugPrint('schedule notification error: $e');
     }
     notifyListeners();
   }
@@ -91,11 +99,15 @@ class CourseProvider extends ChangeNotifier {
     final index = _courses.indexWhere((c) => c.id == course.id);
     if (index != -1) {
       _courses[index] = course;
-      final prefs = await SharedPreferences.getInstance();
-      if (prefs.getBool('notifications_enabled') ?? true) {
-        await _notificationService.cancelNotification(course.id);
-        final reminderMinutes = await _getReminderMinutes();
-        await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        if (prefs.getBool('notifications_enabled') ?? true) {
+          await _notificationService.cancelNotification(course.id);
+          final reminderMinutes = await _getReminderMinutes();
+          await _notificationService.scheduleCourseNotification(course, reminderMinutes);
+        }
+      } catch (e) {
+        debugPrint('update notification error: $e');
       }
       notifyListeners();
     }
@@ -105,7 +117,11 @@ class CourseProvider extends ChangeNotifier {
     await _initDB();
     await _db!.delete('courses', where: 'id = ?', whereArgs: [id]);
     _courses.removeWhere((c) => c.id == id);
-    await _notificationService.cancelNotification(id);
+    try {
+      await _notificationService.cancelNotification(id);
+    } catch (e) {
+      debugPrint('cancel notification error: $e');
+    }
     notifyListeners();
   }
 
