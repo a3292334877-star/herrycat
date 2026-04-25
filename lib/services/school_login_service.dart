@@ -120,58 +120,65 @@ class SchoolLoginService {
 
   /// 步骤2: 执行 CAS 登录
   Future<bool> login(String username, String password) async {
-    final pageData = await _fetchLoginPageData();
-    _execution = pageData['execution']!;
-    final salt = pageData['salt']!;
+    try {
+      final pageData = await _fetchLoginPageData();
+      final execVal = pageData['execution'] ?? '';
+      final saltVal = pageData['salt'] ?? '';
 
-    if (_execution!.isEmpty) {
-      throw Exception('无法获取登录令牌，请检查网络连接');
-    }
+      if (execVal.isEmpty) {
+        throw Exception('无法连接教务系统，请确认已连接校园WiFi或使用校园VPN');
+      }
+      _execution = execVal;
 
-    final encryptedPwd = _encryptPassword(password, salt ?? '');
+      final encryptedPwd = _encryptPassword(password, saltVal);
 
-    final loginUri = Uri.parse(
-      '$_loginUrl?service=https%3A%2F%2Fjwxt.szpu.edu.cn%2Fjwapp%2Fsys%2Femaphome%2Flogo.do',
-    );
+      final loginUri = Uri.parse(
+        '$_loginUrl?service=https%3A%2F%2Fjwxt.szpu.edu.cn%2Fjwapp%2Fsys%2Femaphome%2Flogo.do',
+      );
 
-    final formData = {
-      'username': username,
-      'password': encryptedPwd,
-      'lt': _execution!,
-      'execution': _execution!,
-      '_eventId': 'submit',
-      'rmShown': '1',
-    };
+      final formData = {
+        'username': username,
+        'password': encryptedPwd,
+        'lt': _execution,
+        'execution': _execution,
+        '_eventId': 'submit',
+        'rmShown': '1',
+      };
 
-    final resp = await http.post(
-      loginUri,
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Referer': loginUri.toString(),
+      final resp = await http.post(
+        loginUri,
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Referer': _loginUrl,
       },
-      body: formData.entries.map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}').join('&'),
+      body: formData,
     ).timeout(const Duration(seconds: 30));
 
-    // 从 Set-Cookie 获取 JSESSIONID
-    final cookies = resp.headers['set-cookie'] ?? '';
-    final jsessionMatch = RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookies);
-    if (jsessionMatch != null) {
-      _jsessionId = jsessionMatch.group(1);
-    }
-
-    if (_jsessionId == null) {
-      final location = resp.headers['location'] ?? '';
-      if ((location ?? '').isNotEmpty && location!.contains('jwxt.szpu.edu.cn')) {
-        return true;
+      final cookies = resp.headers['set-cookie'] ?? '';
+      final jsessionMatch = RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookies);
+      if (jsessionMatch != null) {
+        _jsessionId = jsessionMatch.group(1);
       }
-      if (resp.body.contains('password') || resp.body.contains('密码') || resp.body.contains('error')) {
-        throw Exception('用户名或密码错误');
-      }
-      throw Exception('登录失败，请检查账号密码');
-    }
 
-    return true;
+      if (_jsessionId == null) {
+        final location = resp.headers['location'] ?? '';
+        if (location.isNotEmpty && location.contains('jwxt.szpu.edu.cn')) {
+          return true;
+        }
+        if (resp.body.contains('password') || resp.body.contains('密码') || resp.body.contains('error')) {
+          throw Exception('用户名或密码错误');
+        }
+        throw Exception('登录失败，请检查账号密码');
+      }
+
+      return true;
+    } on http.ClientException catch (e) {
+      if (e.message.contains('SocketException') || e.message.contains('DNS')) {
+        throw Exception('网络无法访问教务系统，请确认已连接校园WiFi（深职院）或使用校园VPN');
+      }
+      rethrow;
+    }
   }
 
   /// 步骤3: 抓取课表
