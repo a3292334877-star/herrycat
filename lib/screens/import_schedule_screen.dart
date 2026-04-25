@@ -80,8 +80,6 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
         final skzc = raw['SKZC'] as String? ?? '1-16周';
         final jasmc = raw['JASMC'] as String? ?? '';
         final skjs = raw['SKJS'] as String? ?? '';
-        final xf = raw['XF'] as String? ?? '0';
-        final xnxqDisplay = raw['XNXQDM_DISPLAY'] as String? ?? '2025-2026-2';
 
         final (startSec, endSec) = parseSectionRange(skjc);
         final (startTime, endTime) = _sectionsToTime(startSec, endSec);
@@ -107,7 +105,9 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
           endTime: endTime,
           location: jasmc,
           color: color,
-          isRecurring: weekInfo.isOddWeek == null,
+          weekCycle: weekInfo.isOddWeek == null
+              ? WeekCycle.all
+              : (weekInfo.isOddWeek! ? WeekCycle.odd : WeekCycle.even),
         );
 
         await provider.addCourse(course);

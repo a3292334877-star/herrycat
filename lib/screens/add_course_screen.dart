@@ -20,7 +20,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
   TimeOfDay _startTime = const TimeOfDay(hour: 8, minute: 0);
   TimeOfDay _endTime = const TimeOfDay(hour: 9, minute: 40);
   Color _selectedColor = Colors.blue;
-  bool _isRecurring = true;
+  WeekCycle _weekCycle = WeekCycle.all;
 
   final List<Color> _colors = [
     Colors.blue, Colors.green, Colors.orange, Colors.purple,
@@ -135,11 +135,16 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
               )).toList(),
             ),
             const SizedBox(height: 16),
-            SwitchListTile(
-              title: const Text('每周重复'),
-              subtitle: const Text('在本学期的每个相同星期几显示'),
-              value: _isRecurring,
-              onChanged: (v) => setState(() => _isRecurring = v),
+            const Text('周次', style: TextStyle(fontSize: 16)),
+            const SizedBox(height: 8),
+            SegmentedButton<WeekCycle>(
+              segments: const [
+                ButtonSegment(value: WeekCycle.all, label: Text('全周')),
+                ButtonSegment(value: WeekCycle.odd, label: Text('单周')),
+                ButtonSegment(value: WeekCycle.even, label: Text('双周')),
+              ],
+              selected: {_weekCycle},
+              onSelectionChanged: (set) => setState(() => _weekCycle = set.first),
             ),
             const SizedBox(height: 32),
             ElevatedButton(
@@ -182,7 +187,7 @@ class _AddCourseScreenState extends State<AddCourseScreen> {
       endTime: _formatTime(_endTime),
       location: _locationController.text,
       color: _selectedColor,
-      isRecurring: _isRecurring,
+      weekCycle: _weekCycle,
     );
 
     final provider = context.read<CourseProvider>();

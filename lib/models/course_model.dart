@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
 
+/// 周类型：全部周、单周、双周
+enum WeekCycle {
+  all,   // 全部周
+  odd,   // 单周
+  even,  // 双周
+}
+
 class Course {
   final String id;
   final String name;
@@ -9,7 +16,7 @@ class Course {
   final String endTime;
   final String location;
   final Color color;
-  final bool isRecurring;
+  final WeekCycle weekCycle;
 
   Course({
     required this.id,
@@ -20,7 +27,7 @@ class Course {
     required this.endTime,
     required this.location,
     required this.color,
-    this.isRecurring = true,
+    this.weekCycle = WeekCycle.all,
   });
 
   Map<String, dynamic> toMap() {
@@ -33,7 +40,7 @@ class Course {
       'endTime': endTime,
       'location': location,
       'color': color.value,
-      'isRecurring': isRecurring ? 1 : 0,
+      'weekCycle': weekCycle.index,
     };
   }
 
@@ -47,7 +54,7 @@ class Course {
       endTime: map['endTime'],
       location: map['location'],
       color: Color(map['color']),
-      isRecurring: (map['isRecurring'] ?? 1) == 1,
+      weekCycle: WeekCycle.values[map['weekCycle'] ?? 0],
     );
   }
 
@@ -60,7 +67,7 @@ class Course {
     String? endTime,
     String? location,
     Color? color,
-    bool? isRecurring,
+    WeekCycle? weekCycle,
   }) {
     return Course(
       id: id ?? this.id,
@@ -71,7 +78,7 @@ class Course {
       endTime: endTime ?? this.endTime,
       location: location ?? this.location,
       color: color ?? this.color,
-      isRecurring: isRecurring ?? this.isRecurring,
+      weekCycle: weekCycle ?? this.weekCycle,
     );
   }
 
@@ -81,4 +88,23 @@ class Course {
   }
 
   String get timeSlot => '$startTime - $endTime';
+
+  String get weekCycleLabel {
+    switch (weekCycle) {
+      case WeekCycle.all:
+        return '全周';
+      case WeekCycle.odd:
+        return '单周';
+      case WeekCycle.even:
+        return '双周';
+    }
+  }
+
+  /// 判断某周次（从1开始）是否应该显示这门课
+  bool shouldShowInWeek(int weekNum) {
+    if (weekCycle == WeekCycle.all) return true;
+    if (weekCycle == WeekCycle.odd) return weekNum % 2 == 1;
+    if (weekCycle == WeekCycle.even) return weekNum % 2 == 0;
+    return true;
+  }
 }

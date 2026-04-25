@@ -61,6 +61,14 @@ class CourseCard extends StatelessWidget {
                   ],
                 ),
               ],
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.repeat, size: 16, color: Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text(course.weekCycleLabel, style: TextStyle(color: Colors.grey[600])),
+                ],
+              ),
             ],
           ),
         ),
