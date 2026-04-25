@@ -14,14 +14,12 @@ class WeeklyGridView extends StatelessWidget {
     _TimeSlot(2, '09:20', '10:05'),
     _TimeSlot(3, '10:25', '11:10'),
     _TimeSlot(4, '11:15', '12:00'),
-    _TimeSlot(5, '12:05', '12:50'),
-    _TimeSlot(6, '14:00', '14:45'),
-    _TimeSlot(7, '14:50', '15:35'),
-    _TimeSlot(8, '15:55', '16:40'),
-    _TimeSlot(9, '16:45', '17:30'),
-    _TimeSlot(10, '17:35', '18:20'),
-    _TimeSlot(11, '19:00', '19:45'),
-    _TimeSlot(12, '19:50', '20:35'),
+    _TimeSlot(5, '14:00', '14:45'),
+    _TimeSlot(6, '14:50', '15:35'),
+    _TimeSlot(7, '15:45', '16:30'),
+    _TimeSlot(8, '16:35', '17:20'),
+    _TimeSlot(9, '17:30', '18:55'),
+    _TimeSlot(10, '19:05', '20:30'),
   ];
 
   static const double _timeColW = 44.0;
@@ -328,8 +326,9 @@ class WeeklyGridView extends StatelessWidget {
     const rowH = _rowH;
 
     final top = ((startMin - startOfDay) / 45) * rowH;
-    final bottom = ((endMin - startOfDay) / 45) * rowH;
-    return (top.clamp(0.0, double.infinity), (bottom - top).clamp(18.0, double.infinity));
+    final durationMin = endMin - startMin;
+    final height = (durationMin / 45) * rowH;
+    return (top.clamp(0.0, double.infinity), height.clamp(18.0, double.infinity));
   }
 
   int _parseTime(String t) {
