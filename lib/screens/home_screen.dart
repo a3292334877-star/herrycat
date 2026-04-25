@@ -34,23 +34,38 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     return Scaffold(
+      backgroundColor: const Color(0xFF1C1E21),
       appBar: AppBar(
-        title: const Text('Herrycat 课表'),
+        backgroundColor: const Color(0xFF1C1E21),
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: const Text(
+          '📚 课程表',
+          style: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 20,
+          ),
+        ),
         bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(108),
+          preferredSize: const Size.fromHeight(96),
           child: Column(
             children: [
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: TextField(
                   controller: _searchController,
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     hintText: '搜索课程...',
-                    prefixIcon: const Icon(Icons.search),
+                    hintStyle: TextStyle(color: Colors.grey[500]),
+                    prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear),
+                            icon: Icon(Icons.clear, color: Colors.grey[500]),
                             onPressed: () {
                               _searchController.clear();
                               setState(() => _searchQuery = '');
@@ -58,40 +73,50 @@ class _HomeScreenState extends State<HomeScreen>
                           )
                         : null,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(30),
+                      borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor: const Color(0xFF2C2E33),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
                 ),
               ),
-              TabBar(
-                controller: _tabController,
-                isScrollable: true,
-                tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+              SizedBox(
+                height: 40,
+                child: TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  unselectedLabelColor: Colors.grey[500],
+                  indicatorColor: colorScheme.primary,
+                  indicatorWeight: 3,
+                  dividerColor: Colors.transparent,
+                  tabAlignment: TabAlignment.start,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  tabs: _dayNames.map((d) => Tab(text: d)).toList(),
+                ),
               ),
             ],
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.bar_chart),
+            icon: const Icon(Icons.bar_chart, color: Colors.white),
             onPressed: () => Navigator.pushNamed(context, '/statistics'),
           ),
           IconButton(
-            icon: const Icon(Icons.download),
+            icon: const Icon(Icons.download, color: Colors.white),
             tooltip: '导入课表',
             onPressed: _importSchedule,
           ),
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share, color: Colors.white),
             onPressed: _shareSchedule,
           ),
           IconButton(
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings, color: Colors.white),
             onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
@@ -99,7 +124,9 @@ class _HomeScreenState extends State<HomeScreen>
       body: Consumer<CourseProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
           }
 
           if (_searchQuery.isNotEmpty) {
@@ -120,6 +147,8 @@ class _HomeScreenState extends State<HomeScreen>
         },
       ),
       floatingActionButton: FloatingActionButton(
+        backgroundColor: colorScheme.primary,
+        foregroundColor: Colors.white,
         onPressed: () => Navigator.pushNamed(context, '/add'),
         child: const Icon(Icons.add),
       ),
@@ -132,15 +161,18 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text('没有找到"$_searchQuery"相关的课程', style: TextStyle(color: Colors.grey[600])),
+            Text(
+              '没有找到"$_searchQuery"相关的课程',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: courses.length,
       itemBuilder: (context, i) {
         final course = courses[i];
@@ -159,15 +191,18 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_available, size: 64, color: Colors.grey[400]),
+            Icon(Icons.event_available, size: 64, color: Colors.grey[600]),
             const SizedBox(height: 16),
-            Text('这天没课～', style: TextStyle(color: Colors.grey[600])),
+            Text(
+              '这天没课～',
+              style: TextStyle(color: Colors.grey[500]),
+            ),
           ],
         ),
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       itemCount: courses.length,
       itemBuilder: (context, i) {
         final course = courses[i];
@@ -191,7 +226,8 @@ class _HomeScreenState extends State<HomeScreen>
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('换课'),
+        backgroundColor: const Color(0xFF2C2E33),
+        title: const Text('换课', style: TextStyle(color: Colors.white)),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -201,8 +237,8 @@ class _HomeScreenState extends State<HomeScreen>
               final other = courses[index];
               if (other.id == course.id) return const SizedBox.shrink();
               return ListTile(
-                title: Text(other.name),
-                subtitle: Text(other.timeSlot),
+                title: Text(other.name, style: const TextStyle(color: Colors.white)),
+                subtitle: Text(other.timeSlot, style: TextStyle(color: Colors.grey[400])),
                 onTap: () {
                   provider.swapCourses(course.id, other.id);
                   Navigator.pop(context);
@@ -249,7 +285,6 @@ class _HomeScreenState extends State<HomeScreen>
   Future<void> _importSchedule() async {
     final result = await Navigator.pushNamed(context, '/import');
     if (result == true && mounted) {
-      // 导入成功，刷新课表
       context.read<CourseProvider>().loadCourses();
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(

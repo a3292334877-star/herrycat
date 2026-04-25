@@ -16,38 +16,88 @@ class CourseCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 10),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+      ),
+      color: const Color(0xFF2C2E33),
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            border: Border(left: BorderSide(color: course.color, width: 4)),
+            borderRadius: BorderRadius.circular(14),
+            border: Border(
+              left: BorderSide(
+                color: course.color,
+                width: 4,
+              ),
+            ),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                course.name,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      course.name,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: course.weekCycle == WeekCycle.odd
+                          ? const Color(0xFFFF7B9C).withOpacity(0.2)
+                          : course.weekCycle == WeekCycle.even
+                              ? const Color(0xFF5B9BF5).withOpacity(0.2)
+                              : Colors.grey.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      course.weekCycleLabel,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: course.weekCycle == WeekCycle.odd
+                            ? const Color(0xFFFF7B9C)
+                            : course.weekCycle == WeekCycle.even
+                                ? const Color(0xFF5B9BF5)
+                                : Colors.grey[400],
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                  Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
                   const SizedBox(width: 4),
-                  Text(course.timeSlot, style: TextStyle(color: Colors.grey[600])),
+                  Text(
+                    course.timeSlot,
+                    style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                  ),
                 ],
               ),
               if (course.location.isNotEmpty) ...[
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+                    Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 4),
-                    Text(course.location, style: TextStyle(color: Colors.grey[600])),
+                    Text(
+                      course.location,
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
                   ],
                 ),
               ],
@@ -55,20 +105,15 @@ class CourseCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.person, size: 16, color: Colors.grey[600]),
+                    Icon(Icons.person, size: 14, color: Colors.grey[500]),
                     const SizedBox(width: 4),
-                    Text(course.teacher, style: TextStyle(color: Colors.grey[600])),
+                    Text(
+                      course.teacher,
+                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    ),
                   ],
                 ),
               ],
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.repeat, size: 16, color: Colors.grey[600]),
-                  const SizedBox(width: 4),
-                  Text(course.weekCycleLabel, style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
             ],
           ),
         ),
