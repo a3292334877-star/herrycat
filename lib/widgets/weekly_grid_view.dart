@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/course_provider.dart';
+import '../providers/settings_provider.dart';
 import '../models/course_model.dart';
-import '../widgets/course_card.dart';
 
-/// Weekly grid view: 7 day columns + time rows, all visible at once
+/// Weekly grid view with prev/next week navigation.
+/// Shows all courses for a chosen week across Mon-Sun columns.
 class WeeklyGridView extends StatelessWidget {
   const WeeklyGridView({super.key});
 
@@ -25,112 +26,48 @@ class WeeklyGridView extends StatelessWidget {
     _TimeSlot(14, '21:30', '22:15'),
   ];
 
-  static const double _colW = 110.0;
-  static const double _rowH = 52.0;
-  static const double _timeColW = 46.0;
-  static const double _headerH = 42.0;
+  static const double _timeColW = 44.0;
+  static const double _headerH = 38.0;
+  static const double _rowH = 50.0;
+  static const double _colW = 48.0;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CourseProvider>(
-      builder: (context, provider, child) {
-        if (provider.isLoading) {
+    return Consumer2<CourseProvider, SettingsProvider>(
+      builder: (context, courseProvider, settings, child) {
+        if (courseProvider.isLoading) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final courses = provider.courses;
+        final weekNum = settings.currentWeek;
+        final courses = courseProvider.courses;
         final dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
         return Column(
           children: [
-            // Header row: time col + 7 day headers
-            SizedBox(
-              height: _headerH,
-              child: Row(
-                children: [
-                  SizedBox(width: _timeColW, height: _headerH),
-                  ...List.generate(7, (i) => SizedBox(
-                    width: _colW,
-                    height: _headerH,
-                    child: Center(
-                      child: Text(
-                        dayNames[i],
-                        style: TextStyle(
-                          color: Colors.grey[400],
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  )),
-                ],
-              ),
-            ),
-            // Grid body
+            // ── Week selector bar ──────────────────────────────────────
+            _buildWeekBar(context, settings, weekNum),
+            // ── Day-name header ───────────────────────────────────────
+            _buildHeader(dayNames),
+            // ── Scrollable grid ────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Time label column
-                    SizedBox(
-                      width: _timeColW,
-                      child: Column(
-                        children: List.generate(_slots.length, (i) {
-                          final slot = _slots[i];
-                          return SizedBox(
-                            width: _timeColW,
-                            height: _rowH,
-                            child: Align(
-                              alignment: Alignment.topRight,
-                              child: Padding(
-                                padding: const EdgeInsets.only(right: 6, top: 4),
-                                child: Text(
-                                  '${slot.start}\n${slot.end}',
-                                  textAlign: TextAlign.right,
-                                  style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 9,
-                                    height: 1.2,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                    // Day columns
-                    ...List.generate(7, (dayIdx) {
-                      final day = dayIdx + 1;
-                      final dayCourses = courses.where((c) => c.dayOfWeek == day).toList();
-
-                      return SizedBox(
-                        width: _colW,
-                        child: Stack(
-                          children: [
-                            // Grid lines
-                            Column(
-                              children: List.generate(_slots.length, (i) {
-                                return Container(
-                                  width: _colW,
-                                  height: _rowH,
-                                  decoration: BoxDecoration(
-                                    border: Border(
-                                      top: BorderSide(color: Colors.grey[850]!, width: 0.5),
-                                      right: BorderSide(color: Colors.grey[850]!, width: 0.5),
-                                    ),
-                                  ),
-                                );
-                              }),
-                            ),
-                            // Course blocks
-                            ...dayCourses.map((c) => _buildCourseBlock(c, dayCourses)),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
+                scrollDirection: Axis.horizontal,
+                child: SizedBox(
+                  width: _timeColW + 7 * _colW,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildTimeColumn(),
+                      ...List.generate(7, (dayIdx) {
+                        final day = dayIdx + 1;
+                        final dayCourses = courses
+                            .where((c) => c.dayOfWeek == day && c.shouldShowInWeek(weekNum))
+                            .toList();
+                        return _buildDayColumn(dayCourses);
+                      }),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -140,86 +77,261 @@ class WeeklyGridView extends StatelessWidget {
     );
   }
 
-  Widget _buildCourseBlock(Course course, List<Course> dayCourses) {
+  Widget _buildWeekBar(BuildContext context, SettingsProvider settings, int weekNum) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      color: const Color(0xFF1C1E21),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left, color: Colors.white),
+            onPressed: () {
+              if (settings.currentWeek > 1) {
+                settings.setCurrentWeek(settings.currentWeek - 1);
+              }
+            },
+          ),
+          GestureDetector(
+            onTap: () => _showWeekPicker(context, settings, weekNum),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2C2E33),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today, color: Colors.white, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    '第 $weekNum 周',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right, color: Colors.white),
+            onPressed: () {
+              if (settings.currentWeek < 20) {
+                settings.setCurrentWeek(settings.currentWeek + 1);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showWeekPicker(BuildContext context, SettingsProvider settings, int current) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF2C2E33),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SizedBox(
+        height: 300,
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              child: const Text('选择周次', style: TextStyle(color: Colors.white, fontSize: 16)),
+            ),
+            Expanded(
+              child: GridView.builder(
+                padding: const EdgeInsets.all(16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 5,
+                  mainAxisSpacing: 8,
+                  crossAxisSpacing: 8,
+                  childAspectRatio: 1.6,
+                ),
+                itemCount: 20,
+                itemBuilder: (ctx, i) {
+                  final w = i + 1;
+                  final isSelected = w == current;
+                  return InkWell(
+                    onTap: () {
+                      settings.setCurrentWeek(w);
+                      Navigator.pop(ctx);
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF5B9BF5)
+                            : const Color(0xFF3A3D41),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '$w',
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.grey[400],
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(List<String> dayNames) {
+    return SizedBox(
+      height: _headerH,
+      child: Row(
+        children: [
+          SizedBox(width: _timeColW, height: _headerH),
+          ...List.generate(7, (i) => SizedBox(
+            width: _colW,
+            height: _headerH,
+            child: Center(
+              child: Text(
+                dayNames[i],
+                style: TextStyle(
+                  color: Colors.grey[400],
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          )),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeColumn() {
+    return SizedBox(
+      width: _timeColW,
+      child: Column(
+        children: List.generate(_slots.length, (i) {
+          final slot = _slots[i];
+          return SizedBox(
+            width: _timeColW,
+            height: _rowH,
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.only(right: 4, top: 2),
+                child: Text(
+                  slot.start,
+                  textAlign: TextAlign.right,
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 9,
+                    height: 1.15,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }),
+      ),
+    );
+  }
+
+  Widget _buildDayColumn(List<Course> dayCourses) {
+    return SizedBox(
+      width: _colW,
+      height: _slots.length * _rowH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Column(
+            children: List.generate(_slots.length, (i) {
+              return SizedBox(
+                width: _colW,
+                height: _rowH,
+                child: Container(
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(color: Colors.grey[850]!, width: 0.5),
+                      right: BorderSide(color: Colors.grey[850]!, width: 0.5),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+          ...dayCourses.map((c) => _buildCourseBlock(c)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCourseBlock(Course course) {
     final (top, height) = _calcPosition(course.startTime, course.endTime);
-    final sameSlot = dayCourses.where((c) =>
-      c.id != course.id &&
-      c.startTime == course.startTime &&
-      c.endTime == course.endTime &&
-      c.dayOfWeek == course.dayOfWeek
-    ).length;
-    final offset = sameSlot > 0 ? 0.0 : 0.0;
 
     return Positioned(
       top: top,
-      left: 2,
-      right: 2,
+      left: 1,
+      right: 1,
       height: height,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final blockW = constraints.maxWidth;
-          return Container(
-            width: blockW,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
-          decoration: BoxDecoration(
-            color: course.color.withOpacity(0.85),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        decoration: BoxDecoration(
+          color: course.color.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
                 course.name,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 10,
+                  fontSize: 8,
                   fontWeight: FontWeight.bold,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (course.location.isNotEmpty && height > 30) ...[
-                Text(
+            ),
+            if (course.location.isNotEmpty && height > 24)
+              Flexible(
+                child: Text(
                   course.location,
-                  style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 8),
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.8),
+                    fontSize: 7,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-              ],
-              if (course.weekCycle != WeekCycle.all && height > 44) ...[
-                Container(
-                  margin: const EdgeInsets.only(top: 2),
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: Colors.black26,
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: Text(
-                    course.weekCycleLabel,
-                    style: const TextStyle(color: Colors.white, fontSize: 7),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        );
-      }),
+              ),
+          ],
+        ),
+      ),
     );
   }
 
   (double, double) _calcPosition(String startTime, String endTime) {
-    // Parse times
     final startMin = _parseTime(startTime);
     final endMin = _parseTime(endTime);
+    const startOfDay = 8 * 60;
+    const rowH = _rowH;
 
-    // Grid starts at 08:00 = 480 min, each row = 52dp for 45 min (or 60 min span)
-    const startOfDay = 8 * 60; // 480 min
-    const rowHeight = _rowH;
-
-    final top = ((startMin - startOfDay) / 45) * rowHeight;
-    final bottom = ((endMin - startOfDay) / 45) * rowHeight;
-    return (top.clamp(0, double.infinity), (bottom - top).clamp(24, double.infinity));
+    final top = ((startMin - startOfDay) / 45) * rowH;
+    final bottom = ((endMin - startOfDay) / 45) * rowH;
+    return (top.clamp(0.0, double.infinity), (bottom - top).clamp(18.0, double.infinity));
   }
 
   int _parseTime(String t) {
