@@ -4,6 +4,7 @@ import 'package:share_plus/share_plus.dart';
 import '../providers/course_provider.dart';
 import '../models/course_model.dart';
 import '../widgets/course_card.dart';
+import '../widgets/weekly_grid_view.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen>
   final List<String> _dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
+  bool _weeklyGridMode = true;
 
   @override
   void initState() {
@@ -103,6 +105,11 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         actions: [
           IconButton(
+            icon: Icon(_weeklyGridMode ? Icons.view_list : Icons.grid_view, color: Colors.white),
+            tooltip: _weeklyGridMode ? '切换列表' : '切换周视图',
+            onPressed: () => setState(() => _weeklyGridMode = !_weeklyGridMode),
+          ),
+          IconButton(
             icon: const Icon(Icons.bar_chart, color: Colors.white),
             onPressed: () => Navigator.pushNamed(context, '/statistics'),
           ),
@@ -134,6 +141,10 @@ class _HomeScreenState extends State<HomeScreen>
                 .where((c) => c.name.toLowerCase().contains(_searchQuery))
                 .toList();
             return _buildSearchResults(results);
+          }
+
+          if (_weeklyGridMode) {
+            return const WeeklyGridView();
           }
 
           return TabBarView(
