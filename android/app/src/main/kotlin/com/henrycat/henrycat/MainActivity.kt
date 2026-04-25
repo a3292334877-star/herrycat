@@ -1,4 +1,4 @@
-package com.herrycat.herrycat
+package com.henrycat.henrycat
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -23,7 +23,7 @@ class CourseProvider extends ChangeNotifier {
     if (_db != null) return;
     final dbPath = await getDatabasesPath();
     _db = await openDatabase(
-      p.join(dbPath, 'herrycat.db'),
+      p.join(dbPath, 'Henrycat.db'),
       version: 1,
       onCreate: (db, version) async {
         await db.execute('''
