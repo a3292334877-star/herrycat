@@ -10,20 +10,18 @@ class WeeklyGridView extends StatelessWidget {
   const WeeklyGridView({super.key});
 
   static const List<_TimeSlot> _slots = [
-    _TimeSlot(1, '08:00', '08:45'),
-    _TimeSlot(2, '08:50', '09:35'),
-    _TimeSlot(3, '09:55', '10:40'),
-    _TimeSlot(4, '10:45', '11:30'),
-    _TimeSlot(5, '11:35', '12:20'),
-    _TimeSlot(6, '14:00', '14:45'),
-    _TimeSlot(7, '14:50', '15:35'),
-    _TimeSlot(8, '15:55', '16:40'),
-    _TimeSlot(9, '16:45', '17:30'),
-    _TimeSlot(10, '17:35', '18:20'),
+    _TimeSlot(1, '08:30', '09:15'),
+    _TimeSlot(2, '09:20', '10:05'),
+    _TimeSlot(3, '10:25', '11:10'),
+    _TimeSlot(4, '11:15', '12:00'),
+    _TimeSlot(5, '12:05', '12:50'),
+    _TimeSlot(6, '14:30', '15:15'),
+    _TimeSlot(7, '15:20', '16:05'),
+    _TimeSlot(8, '16:25', '17:10'),
+    _TimeSlot(9, '17:15', '18:00'),
+    _TimeSlot(10, '18:05', '18:50'),
     _TimeSlot(11, '19:00', '19:45'),
     _TimeSlot(12, '19:50', '20:35'),
-    _TimeSlot(13, '20:40', '21:25'),
-    _TimeSlot(14, '21:30', '22:15'),
   ];
 
   static const double _timeColW = 44.0;
@@ -326,7 +324,7 @@ class WeeklyGridView extends StatelessWidget {
   (double, double) _calcPosition(String startTime, String endTime) {
     final startMin = _parseTime(startTime);
     final endMin = _parseTime(endTime);
-    const startOfDay = 8 * 60;
+    const startOfDay = 8 * 60 + 30;
     const rowH = _rowH;
 
     final top = ((startMin - startOfDay) / 45) * rowH;
