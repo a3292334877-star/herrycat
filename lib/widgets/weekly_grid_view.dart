@@ -5,27 +5,31 @@ import '../providers/settings_provider.dart';
 import '../models/course_model.dart';
 
 /// Weekly grid view with prev/next week navigation.
-/// Shows all courses for a chosen week across Mon-Sun columns.
+/// Uses absolute minute-based positioning so merged slots (e.g. 85-min)
+/// and any duration align perfectly on the timeline.
 class WeeklyGridView extends StatelessWidget {
   const WeeklyGridView({super.key});
 
-  static const List<_TimeSlot> _slots = [
-    _TimeSlot(1, '08:30', '09:15'),
-    _TimeSlot(2, '09:20', '10:05'),
-    _TimeSlot(3, '10:25', '11:10'),
-    _TimeSlot(4, '11:15', '12:00'),
-    _TimeSlot(5, '14:00', '14:45'),
-    _TimeSlot(6, '14:50', '15:35'),
-    _TimeSlot(7, '15:45', '16:30'),
-    _TimeSlot(8, '16:35', '17:20'),
-    _TimeSlot(9, '17:30', '18:55'),
-    _TimeSlot(10, '19:05', '20:30'),
-  ];
+  // ── Timeline constants ───────────────────────────────────────────────────
+  // Day: 08:30 (510 min) → 20:30 (1230 min) = 720 total minutes
+  static const int _dayStartMin = 8 * 60 + 30; // 510
+  static const int _dayEndMin   = 20 * 60 + 30; // 1230
+  static const int _totalMin    = _dayEndMin - _dayStartMin; // 720
 
-  static const double _timeColW = 44.0;
-  static const double _headerH = 38.0;
-  static const double _rowH = 50.0;
-  static const double _colW = 48.0;
+  // Fixed pixel height: each hour = 105 px  →  12 h × 105 = 1260 px total
+  static const double _containerH = 1260.0;
+  static const double _hourH      = 105.0;
+  static const double _timeColW   = 50.0;
+  static const double _colW       = 56.0;
+
+  // Convert minutes-since-08:30 → pixels
+  static double _minToPx(int min) =>
+      ((min - _dayStartMin) / _totalMin) * _containerH;
+
+  // ── Hour-grid line positions (in px from top) ───────────────────────────
+  // Every full hour from 09:00 → 20:00
+  static double _hourPx(int hour) =>
+      _minToPx(hour * 60); // e.g. hour=9 → min=540 → px
 
   @override
   Widget build(BuildContext context) {
@@ -35,17 +39,14 @@ class WeeklyGridView extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
 
-        final weekNum = settings.currentWeek;
-        final courses = courseProvider.courses;
+        final weekNum  = settings.currentWeek;
+        final courses  = courseProvider.courses;
         final dayNames = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
         return Column(
           children: [
-            // ── Week selector bar ──────────────────────────────────────
             _buildWeekBar(context, settings, weekNum),
-            // ── Day-name header ───────────────────────────────────────
             _buildHeader(dayNames),
-            // ── Scrollable grid ────────────────────────────────────────
             Expanded(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
@@ -54,13 +55,13 @@ class WeeklyGridView extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildTimeColumn(),
-                      ...List.generate(7, (dayIdx) {
-                        final day = dayIdx + 1;
+                      _TimeColumn(),
+                      ...List.generate(7, (i) {
+                        final day = i + 1;
                         final dayCourses = courses
                             .where((c) => c.dayOfWeek == day && c.shouldShowInWeek(weekNum))
                             .toList();
-                        return _buildDayColumn(dayCourses);
+                        return _DayColumn(dayCourses);
                       }),
                     ],
                   ),
@@ -138,9 +139,9 @@ class WeeklyGridView extends StatelessWidget {
         height: 300,
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: const Text('选择周次', style: TextStyle(color: Colors.white, fontSize: 16)),
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('选择周次', style: TextStyle(color: Colors.white, fontSize: 16)),
             ),
             Expanded(
               child: GridView.builder(
@@ -189,13 +190,13 @@ class WeeklyGridView extends StatelessWidget {
 
   Widget _buildHeader(List<String> dayNames) {
     return SizedBox(
-      height: _headerH,
+      height: 36,
       child: Row(
         children: [
-          SizedBox(width: _timeColW, height: _headerH),
+          SizedBox(width: _timeColW, height: 36),
           ...List.generate(7, (i) => SizedBox(
             width: _colW,
-            height: _headerH,
+            height: 36,
             child: Center(
               child: Text(
                 dayNames[i],
@@ -211,135 +212,160 @@ class WeeklyGridView extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _buildTimeColumn() {
+// ── Time-label column (left, fixed) ────────────────────────────────────────
+class _TimeColumn extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    // Hour labels: 09:00, 11:00, 13:00, 15:00, 17:00, 19:00
+    // (08:30 label at very top edge, 20:30 at bottom edge — omitted for space)
+    final hourLabels = [9, 11, 13, 15, 17, 19];
+
     return SizedBox(
-      width: _timeColW,
-      child: Column(
-        children: List.generate(_slots.length, (i) {
-          final slot = _slots[i];
-          return SizedBox(
-            width: _timeColW,
-            height: _rowH,
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(right: 4, top: 2),
-                child: Text(
-                  slot.start,
-                  textAlign: TextAlign.right,
-                  style: TextStyle(
-                    color: Colors.grey[600],
-                    fontSize: 9,
-                    height: 1.15,
-                  ),
-                ),
+      width: WeeklyGridView._timeColW,
+      height: WeeklyGridView._containerH,
+      child: Stack(
+        children: [
+          // Hour grid lines (vertical dashed look)
+          ...hourLabels.map((h) => Positioned(
+            top: WeeklyGridView._hourPx(h),
+            left: 0,
+            right: 0,
+            child: Container(
+              height: 0.5,
+              color: Colors.grey[850],
+            ),
+          )),
+          // Time labels
+          ...hourLabels.map((h) => Positioned(
+            top: WeeklyGridView._hourPx(h) - 8,
+            left: 0,
+            right: 4,
+            child: Text(
+              '${h.toString().padLeft(2, '0')}:00',
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 9,
+                height: 1.2,
               ),
             ),
-          );
-        }),
-      ),
-    );
-  }
-
-  Widget _buildDayColumn(List<Course> dayCourses) {
-    return SizedBox(
-      width: _colW,
-      height: _slots.length * _rowH,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Column(
-            children: List.generate(_slots.length, (i) {
-              return SizedBox(
-                width: _colW,
-                height: _rowH,
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border(
-                      top: BorderSide(color: Colors.grey[850]!, width: 0.5),
-                      right: BorderSide(color: Colors.grey[850]!, width: 0.5),
-                    ),
-                  ),
-                ),
-              );
-            }),
-          ),
-          ...dayCourses.map((c) => _buildCourseBlock(c)),
+          )),
         ],
       ),
     );
   }
+}
 
-  Widget _buildCourseBlock(Course course) {
-    final (top, height) = _calcPosition(course.startTime, course.endTime);
+// ── Single day column ───────────────────────────────────────────────────────
+class _DayColumn extends StatelessWidget {
+  final List<Course> courses;
+  const _DayColumn(this.courses);
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: WeeklyGridView._colW,
+      height: WeeklyGridView._containerH,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Hour grid lines
+          ...[9, 11, 13, 15, 17, 19].map((h) => Positioned(
+            top: WeeklyGridView._hourPx(h),
+            left: 0,
+            right: 0,
+            child: Container(height: 0.5, color: Colors.grey[850]),
+          )),
+          // Course blocks
+          ...courses.map((c) => _CourseBlock(course: c)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Course block (positioned by actual minutes) ────────────────────────────
+class _CourseBlock extends StatelessWidget {
+  final Course course;
+  const _CourseBlock({required this.course});
+
+  @override
+  Widget build(BuildContext context) {
+    final topPx    = _courseTopPx();
+    final heightPx = _courseHeightPx();
 
     return Positioned(
-      top: top,
+      top: topPx,
       left: 1,
       right: 1,
-      height: height,
+      height: heightPx,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 3),
         decoration: BoxDecoration(
-          color: course.color.withOpacity(0.9),
-          borderRadius: BorderRadius.circular(4),
+          color: course.color.withOpacity(0.92),
+          borderRadius: BorderRadius.circular(5),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Flexible(
-              child: Text(
-                course.name,
-                style: const TextStyle(
-                  color: Colors.white,
+            Text(
+              course.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (course.location.isNotEmpty && heightPx > 28) ...[
+              const SizedBox(height: 1),
+              Text(
+                course.location,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.80),
                   fontSize: 8,
-                  fontWeight: FontWeight.bold,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-            ),
-            if (course.location.isNotEmpty && height > 24)
-              Flexible(
+            ],
+            if (course.weekCycle != WeekCycle.all && heightPx > 44) ...[
+              const SizedBox(height: 2),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.black26,
+                  borderRadius: BorderRadius.circular(3),
+                ),
                 child: Text(
-                  course.location,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
-                    fontSize: 7,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  course.weekCycleLabel,
+                  style: const TextStyle(color: Colors.white, fontSize: 7),
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
 
-  (double, double) _calcPosition(String startTime, String endTime) {
-    final startMin = _parseTime(startTime);
-    final endMin = _parseTime(endTime);
-    const startOfDay = 8 * 60 + 30;
-    const rowH = _rowH;
-
-    final top = ((startMin - startOfDay) / 45) * rowH;
-    final durationMin = endMin - startMin;
-    final height = (durationMin / 45) * rowH;
-    return (top.clamp(0.0, double.infinity), height.clamp(18.0, double.infinity));
+  double _courseTopPx() {
+    final parts = course.startTime.split(':');
+    final startMin = int.parse(parts[0]) * 60 + int.parse(parts[1]);
+    return WeeklyGridView._minToPx(startMin);
   }
 
-  int _parseTime(String t) {
-    final parts = t.split(':');
-    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  double _courseHeightPx() {
+    final sp = course.startTime.split(':');
+    final ep = course.endTime.split(':');
+    final startMin = int.parse(sp[0]) * 60 + int.parse(sp[1]);
+    final endMin   = int.parse(ep[0]) * 60 + int.parse(ep[1]);
+    final durMin   = endMin - startMin;
+    return ((durMin / WeeklyGridView._totalMin) * WeeklyGridView._containerH)
+        .clamp(18.0, double.infinity);
   }
-}
-
-class _TimeSlot {
-  final int section;
-  final String start;
-  final String end;
-  const _TimeSlot(this.section, this.start, this.end);
 }
