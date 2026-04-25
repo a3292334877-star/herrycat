@@ -7,6 +7,7 @@ import 'screens/add_course_screen.dart';
 import 'screens/course_detail_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/statistics_screen.dart';
+import 'screens/import_schedule_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -50,6 +51,7 @@ class HerrycatApp extends StatelessWidget {
               '/detail': (context) => const CourseDetailScreen(),
               '/settings': (context) => const SettingsScreen(),
               '/statistics': (context) => const StatisticsScreen(),
+              '/import': (context) => const ImportScheduleScreen(),
             },
           );
         },

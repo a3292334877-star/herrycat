@@ -82,6 +82,11 @@ class _HomeScreenState extends State<HomeScreen>
             onPressed: () => Navigator.pushNamed(context, '/statistics'),
           ),
           IconButton(
+            icon: const Icon(Icons.download),
+            tooltip: '导入课表',
+            onPressed: _importSchedule,
+          ),
+          IconButton(
             icon: const Icon(Icons.share),
             onPressed: _shareSchedule,
           ),
@@ -239,5 +244,19 @@ class _HomeScreenState extends State<HomeScreen>
     }
 
     Share.share(buffer.toString(), subject: 'Herrycat 课程表');
+  }
+
+  Future<void> _importSchedule() async {
+    final result = await Navigator.pushNamed(context, '/import');
+    if (result == true && mounted) {
+      // 导入成功，刷新课表
+      context.read<CourseProvider>().loadCourses();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('✨ 课表导入成功！'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 }
