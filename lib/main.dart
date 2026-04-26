@@ -45,7 +45,7 @@ class HenrycatApp extends StatelessWidget {
                 onSurface: Colors.white,
                 onPrimary: Colors.white,
               ),
-              cardTheme: CardTheme(
+              cardTheme: CardThemeData(
                 color: const Color(0xFF2C2E33),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -84,7 +84,7 @@ class HenrycatApp extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 behavior: SnackBarBehavior.floating,
               ),
-              dialogTheme: DialogTheme(
+              dialogTheme: DialogThemeData(
                 backgroundColor: const Color(0xFF2C2E33),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
@@ -102,7 +102,7 @@ class HenrycatApp extends StatelessWidget {
                   return Colors.grey.withOpacity(0.3);
                 }),
               ),
-              tabBarTheme: TabBarTheme(
+              tabBarTheme: TabBarThemeData(
                 labelColor: Colors.white,
                 unselectedLabelColor: Colors.grey[500],
                 indicatorColor: const Color(0xFF5B9BF5),
@@ -120,7 +120,7 @@ class HenrycatApp extends StatelessWidget {
                 onSurface: Colors.white,
                 onPrimary: Colors.white,
               ),
-              cardTheme: CardTheme(
+              cardTheme: CardThemeData(
                 color: const Color(0xFF2C2E33),
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -159,7 +159,7 @@ class HenrycatApp extends StatelessWidget {
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 behavior: SnackBarBehavior.floating,
               ),
-              dialogTheme: DialogTheme(
+              dialogTheme: DialogThemeData(
                 backgroundColor: const Color(0xFF2C2E33),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               ),
