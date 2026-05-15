@@ -1,62 +1,89 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:http/http.dart' as http;
 
 /// 深圳职业技术大学教务系统登录与课表抓取服务
-/// 使用移动端 API（无需 RSA 加密）
 class SchoolLoginService {
   static const String _baseUrl = 'https://jwxt.szpu.edu.cn';
 
   String? _sessionId;
+  String _cookies = '';
 
-  /// 登录
+  /// 登录（改进版：详细错误追踪 + 多策略重试）
   Future<bool> login(String username, String password) async {
+    final errors = <String>[];
+
+    // 0. 连通性检查
     try {
-      // 1. 获取 RSA 公钥（尝试多个可能的后缀）
-      String? modulus;
-      String exponentHex = '10001';
-
-      for (final keyPath in [
-        '/jwapp/sys/emaphome/getRSAKey.do',
-        '/jwapp/sys/emaphome/getRSAKey',   
-        '/jwapp/sys/login/getRSAKey',
-      ]) {
-        try {
-          final preResp = await http.get(
-            Uri.parse('$_baseUrl$keyPath'),
-            headers: _headers,
-          ).timeout(const Duration(seconds: 10));
-
-          final body = preResp.body.trim();
-          // 如果返回的是 HTML 而不是 JSON，说明路径不对
-          if (body.startsWith('<') || !body.startsWith('{')) {
-            continue;
-          }
-
-          final preData = jsonDecode(body);
-          final keyData = preData['data'] ?? preData;
-          modulus = keyData['modulus'] ?? keyData['key'] ?? '';
-          exponentHex = keyData['exponent'] ?? '10001';
-          break;
-        } catch (_) {
-          continue;
-        }
+      await http.get(Uri.parse(_baseUrl)).timeout(const Duration(seconds: 5));
+    } on http.ClientException catch (e) {
+      if (e.message.contains('SocketException') ||
+          e.message.contains('DNS') ||
+          e.message.contains('Connection refused')) {
+        throw Exception('无法访问教务系统服务器\n'
+            '请确认：\n'
+            '1. 已连接校园WiFi（深职院Campus网）\n'
+            '2. 或已启用深职院VPN');
       }
+      errors.add('连通性检查: ${e.message}');
+    } catch (e) {
+      errors.add('连通性检查: $e');
+    }
 
-      // 2. RSA 加密密码（如果没拿到公钥则用明文）
-      final encryptedPwd = modulus != null && modulus.isNotEmpty
-          ? _rsaEncrypt(password, modulus, exponentHex)
-          : base64Encode(utf8.encode(password));
+    // 1. 尝试获取 RSA 公钥
+    String? modulus;
+    String exponentHex = '10001';
 
-      // 3. 登录请求（尝试多个登录接口）
-      http.Response? loginResp;
-      for (final loginPath in [
-        '/jwapp/sys/emaphome/login.do',
-        '/jwapp/sys/emaphome/login',
-        '/jwapp/sys/login',
-      ]) {
+    for (final keyPath in [
+      '/jwapp/sys/emaphome/getRSAKey.do',
+      '/jwapp/sys/emaphome/getRSAKey',
+      '/jwapp/sys/login/getRSAKey',
+    ]) {
+      try {
+        final preResp = await http.get(
+          Uri.parse('$_baseUrl$keyPath'),
+          headers: _headers,
+        ).timeout(const Duration(seconds: 10));
+
+        final body = preResp.body.trim();
+        if (body.isEmpty) continue;
+        if (body.startsWith('<') || !body.startsWith('{')) continue;
+
+        final preData = jsonDecode(body);
+        final keyData = preData['data'] ?? preData;
+        modulus = keyData['modulus'] ?? keyData['key'] ?? keyData['publicKey'] ?? '';
+        exponentHex = keyData['exponent'] ?? '10001';
+
+        if (modulus != null && modulus.isNotEmpty) break;
+      } catch (e) {
+        // 单个路径失败不致命
+      }
+    }
+
+    // 2. 加密密码
+    String? encryptedPwd;
+    if (modulus != null && modulus.isNotEmpty) {
+      try {
+        encryptedPwd = _rsaEncrypt(password, modulus, exponentHex);
+      } catch (e) {
+        errors.add('RSA加密失败: $e，将尝试其他方式');
+      }
+    }
+
+    // 3. 登录 — 多策略重试
+    final loginPaths = [
+      '/jwapp/sys/emaphome/login.do',
+      '/jwapp/sys/emaphome/login',
+      '/jwapp/sys/login',
+      '/jwapp/sys/emaphome/login.do?method=login',
+    ];
+
+    // 策略 A: JSON body + RSA加密密码
+    if (encryptedPwd != null) {
+      for (final path in loginPaths) {
         try {
           final resp = await http.post(
-            Uri.parse('$_baseUrl$loginPath'),
+            Uri.parse('$_baseUrl$path'),
             headers: _headers,
             body: jsonEncode({
               'loginName': username,
@@ -64,77 +91,175 @@ class SchoolLoginService {
             }),
           ).timeout(const Duration(seconds: 15));
 
+          final cookies = _extractCookies(resp);
           final body = resp.body.trim();
-          // 跳过 HTML 响应
-          if (body.startsWith('<') || !body.startsWith('{')) {
-            continue;
+
+          if (_isLoginSuccess(resp, body)) {
+            _sessionId = _extractSessionId(resp, body);
+            _cookies = cookies;
+            return true;
           }
 
-          loginResp = resp;
-          break;
-        } catch (_) {
-          continue;
-        }
+          if (body.isNotEmpty && body.startsWith('{')) {
+            final data = jsonDecode(body);
+            final msg = data['msg'] ?? data['message'] ?? data['error'] ?? '';
+            if (msg.isNotEmpty) errors.add('$path → $msg');
+          }
+        } catch (_) {}
       }
-
-      if (loginResp == null) {
-        throw Exception('无法连接教务系统服务器，请确认网络已连接校园WiFi或使用VPN');
-      }
-
-      final body = loginResp.body.trim();
-      final loginData = jsonDecode(body);
-      final success = (loginData['code'] == '0' || loginData['code'] == 0 ||
-                      loginData['success'] == true || loginData['success'] == 'true');
-
-      if (!success) {
-        final msg = loginData['msg'] ?? loginData['message'] ?? loginData['error'] ?? '账号或密码错误';
-        throw Exception(msg);
-      }
-
-      // 4. 提取 session
-      final cookieHeader = loginResp.headers['set-cookie'] ?? '';
-      final jsessionMatch = RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookieHeader);
-      _sessionId = jsessionMatch?.group(1) ??
-                  loginData['data']?['token'] ??
-                  loginData['token'] ??
-                  loginData['sessionid'] ??
-                  '';
-
-      return true;
-    } on http.ClientException catch (e) {
-      if (e.message.contains('SocketException') || e.message.contains('DNS')) {
-        throw Exception('网络无法访问教务系统，请确认已连接校园WiFi（深职院Campus网）或使用VPN');
-      }
-      rethrow;
     }
+
+    // 策略 B: JSON body + 明文密码
+    for (final path in loginPaths) {
+      try {
+        final resp = await http.post(
+          Uri.parse('$_baseUrl$path'),
+          headers: _headers,
+          body: jsonEncode({
+            'loginName': username,
+            'password': password,
+          }),
+        ).timeout(const Duration(seconds: 15));
+
+        final cookies = _extractCookies(resp);
+        final body = resp.body.trim();
+
+        if (_isLoginSuccess(resp, body)) {
+          _sessionId = _extractSessionId(resp, body);
+          _cookies = cookies;
+          return true;
+        }
+
+        if (body.isNotEmpty && body.startsWith('{')) {
+          final data = jsonDecode(body);
+          final msg = data['msg'] ?? data['message'] ?? data['error'] ?? '';
+          if (msg.isNotEmpty) errors.add('$path(明文) → $msg');
+        }
+      } catch (_) {}
+    }
+
+    // 策略 C: form-urlencoded body（某些旧版教务系统）
+    for (final path in loginPaths) {
+      try {
+        final resp = await http.post(
+          Uri.parse('$_baseUrl$path'),
+          headers: {
+            ..._headers,
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          },
+          body: 'loginName=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(password)}',
+        ).timeout(const Duration(seconds: 15));
+
+        final cookies = _extractCookies(resp);
+        final body = resp.body.trim();
+
+        if (_isLoginSuccess(resp, body)) {
+          _sessionId = _extractSessionId(resp, body);
+          _cookies = cookies;
+          return true;
+        }
+
+        if (body.isNotEmpty && body.startsWith('{')) {
+          final data = jsonDecode(body);
+          final msg = data['msg'] ?? data['message'] ?? data['error'] ?? '';
+          if (msg.isNotEmpty) errors.add('$path(form) → $msg');
+        }
+      } catch (_) {}
+    }
+
+    // 所有策略都失败了
+    final errorDetail = errors.isNotEmpty
+        ? '详细信息:\n${errors.take(3).map((e) => '  • $e').join('\n')}'
+        : '服务器无响应，请确认账号密码正确且网络为校园网';
+    throw Exception(errorDetail);
   }
 
-  /// RSA 加密（PKCS1v15）
-  String _rsaEncrypt(String plaintext, String modulusHex, String exponentHex) {
-    try {
-      if (modulusHex.isEmpty) {
-        // 没有公钥，直接 base64（某些系统兼容）
-        return base64Encode(utf8.encode(plaintext));
+  /// 判断登录是否成功
+  bool _isLoginSuccess(http.Response resp, String body) {
+    if (body.isEmpty) return false;
+    if (body.startsWith('<')) return false; // HTML 响应 = 失败
+
+    if (body.startsWith('{')) {
+      try {
+        final data = jsonDecode(body);
+        return data['code'] == '0' ||
+            data['code'] == 0 ||
+            data['success'] == true ||
+            data['success'] == 'true' ||
+            (data['result'] != null && data['result'] != 'error');
+      } catch (_) {
+        return false;
       }
-
-      final n = BigInt.parse(modulusHex, radix: 16);
-      final e = BigInt.parse(exponentHex, radix: 16);
-      final keyByteLen = (n.bitLength + 7) >> 3;
-
-      // EM = 0x00 || 0x02 || PS || 0x00 || T
-      final psLen = keyByteLen - plaintext.length - 3;
-      if (psLen < 8) throw Exception('Password too long for RSA key size');
-
-      final ps = List<int>.generate(psLen, (i) => _pseudoRandomByte(i));
-      final t = utf8.encode(plaintext);
-      final em = [0x00, 0x02, ...ps, 0x00, ...t];
-
-      final m = _bytesToBigInt(em);
-      final c = _modexp(m, e, n);
-      return _bigIntToHex(c);
-    } catch (_) {
-      return base64Encode(utf8.encode(plaintext));
     }
+
+    // 302 重定向通常表示登录成功
+    if (resp.statusCode == 302) return true;
+
+    return false;
+  }
+
+  /// 提取所有 Cookie
+  String _extractCookies(http.Response resp) {
+    final cookieHeader = resp.headers['set-cookie'] ?? '';
+    if (cookieHeader.isEmpty) return '';
+
+    // 提取所有 cookie 键值对
+    final cookies = <String>[];
+    for (final part in cookieHeader.split(',')) {
+      final trimmed = part.trim();
+      final semiIdx = trimmed.indexOf(';');
+      final kv = semiIdx > 0 ? trimmed.substring(0, semiIdx) : trimmed;
+      if (kv.contains('=')) cookies.add(kv);
+    }
+    return cookies.join('; ');
+  }
+
+  /// 提取 Session ID
+  String _extractSessionId(http.Response resp, String body) {
+    // 从 Set-Cookie 提取
+    final cookieHeader = resp.headers['set-cookie'] ?? '';
+    final jsessionMatch = RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookieHeader);
+    if (jsessionMatch != null) return jsessionMatch.group(1)!;
+
+    // 从响应 body 提取
+    if (body.startsWith('{')) {
+      try {
+        final data = jsonDecode(body);
+        return data['data']?['token'] ??
+            data['token'] ??
+            data['sessionid'] ??
+            data['data']?['sessionId'] ??
+            '';
+      } catch (_) {}
+    }
+
+    return '';
+  }
+
+  /// RSA 加密（PKCS1v15，使用真随机填充）
+  String _rsaEncrypt(String plaintext, String modulusHex, String exponentHex) {
+    final n = BigInt.parse(modulusHex, radix: 16);
+    final e = BigInt.parse(exponentHex, radix: 16);
+    final keyByteLen = (n.bitLength + 7) >> 3;
+
+    // EM = 0x00 || 0x02 || PS || 0x00 || T
+    final psLen = keyByteLen - plaintext.length - 3;
+    if (psLen < 8) throw Exception('密码过长，RSA密钥不足');
+
+    // 使用真随机填充（PKCS1 v1.5 规范要求非零随机字节）
+    final rng = Random.secure();
+    final ps = List<int>.generate(psLen, (_) {
+      int b;
+      do { b = rng.nextInt(256); } while (b == 0);
+      return b;
+    });
+
+    final t = utf8.encode(plaintext);
+    final em = [0x00, 0x02, ...ps, 0x00, ...t];
+
+    final m = _bytesToBigInt(em);
+    final c = _modexp(m, e, n);
+    return _bigIntToHex(c);
   }
 
   BigInt _bytesToBigInt(List<int> bytes) {
@@ -162,16 +287,12 @@ class SchoolLoginService {
     return result;
   }
 
-  int _pseudoRandomByte(int seed) {
-    // 确定性伪随机（不依赖 Random 类）
-    return ((seed * 0x15A4E35 + 1) % 256).abs();
-  }
-
   Map<String, String> get _headers => {
     'Accept': 'application/json, text/javascript, */*; q=0.01',
     'Accept-Language': 'zh-CN,zh;q=0.9',
     'Content-Type': 'application/json; charset=UTF-8',
-    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148',
+    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
+        'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
     'X-Requested-With': 'XMLHttpRequest',
     'Origin': _baseUrl,
     'Referer': '$_baseUrl/jwapp/sys/emaphome/',
@@ -184,6 +305,7 @@ class SchoolLoginService {
     }
 
     final termCode = await _getCurrentTerm();
+    final errors = <String>[];
 
     http.Response? resp;
     for (final schedulePath in [
@@ -191,13 +313,14 @@ class SchoolLoginService {
       '/jwapp/sys/kcbcxmdl/modules/qxkcp/qxkccxx',
       '/jwapp/sys/kcbcxmdl/modules/qxkcp/queryKccxx',
       '/jwapp/sys/kcbcxmdl/modules/qxkccxx/qxkccxx.do',
+      '/jwapp/sys/kcbcxmdl/modules/qxkcb/qxkccxx.do',
     ]) {
       try {
         final r = await http.post(
           Uri.parse('$_baseUrl$schedulePath'),
           headers: {
             ..._headers,
-            'Cookie': 'JSESSIONID=$_sessionId',
+            if (_cookies.isNotEmpty) 'Cookie': _cookies,
           },
           body: jsonEncode({
             'XNXQDM': termCode,
@@ -210,17 +333,21 @@ class SchoolLoginService {
         ).timeout(const Duration(seconds: 30));
 
         final body = r.body.trim();
+        if (body.isEmpty) continue;
         if (body.startsWith('<') || !body.startsWith('{')) continue;
 
         resp = r;
         break;
-      } catch (_) {
-        continue;
+      } catch (e) {
+        errors.add('$schedulePath: $e');
       }
     }
 
     if (resp == null) {
-      throw Exception('无法获取课表，请确认账号密码正确且网络正常');
+      final detail = errors.isNotEmpty
+          ? '\n尝试的路径:\n${errors.take(3).map((e) => '  • $e').join('\n')}'
+          : '';
+      throw Exception('获取课表失败，可能会话已过期请重新登录$detail');
     }
 
     if (resp.statusCode != 200) {
@@ -228,16 +355,22 @@ class SchoolLoginService {
     }
 
     final data = jsonDecode(resp.body);
-    final success = data['code'] == '0' || data['code'] == 0 ||
-                    data['success'] == true || data['success'] == 'true';
-    if (!success) {
+    // 教务系统有时用 code/success，有时直接返回数据
+    final code = data['code'];
+    final success = code == '0' || code == 0 ||
+        data['success'] == true || data['success'] == 'true';
+
+    if (!success && code != null) {
       final msg = data['msg'] ?? data['message'] ?? '获取课表失败，可能会话已过期，请重新登录';
       throw Exception(msg);
     }
 
+    // 尝试多种数据路径
     final rows = data['datas']?['qxkccxx']?['rows'] ??
-                 data['data']?['rows'] ??
-                 data['datas']?['rows'];
+        data['data']?['rows'] ??
+        data['datas']?['rows'] ??
+        data['rows'];
+
     if (rows == null) return [];
     return (rows as List).cast<Map<String, dynamic>>();
   }
@@ -246,18 +379,25 @@ class SchoolLoginService {
   Future<String> _getCurrentTerm() async {
     for (final termPath in [
       '/jwapp/sys/emaphome/getQXQDMCurrent.do',
-      '/jwapp/sys/emaphome/getQXQ DMCurrent',
+      '/jwapp/sys/emaphome/getQXQDMCurrent',
       '/jwapp/sys/emaphome/getCurrentTerm',
     ]) {
       try {
         final resp = await http.get(
           Uri.parse('$_baseUrl$termPath'),
-          headers: {..._headers, 'Cookie': 'JSESSIONID=$_sessionId'},
+          headers: {
+            ..._headers,
+            if (_cookies.isNotEmpty) 'Cookie': _cookies,
+          },
         ).timeout(const Duration(seconds: 10));
         final body = resp.body.trim();
         if (!body.startsWith('{')) continue;
         final data = jsonDecode(body);
-        return data['data']?['QXXQDM'] ?? data['QXXQDM'] ?? '2025-2026-2';
+        final term = data['data']?['QXXQDM'] ??
+            data['data']?['qxxqdm'] ??
+            data['QXXQDM'] ??
+            '';
+        if (term.isNotEmpty) return term;
       } catch (_) {
         continue;
       }
@@ -313,7 +453,7 @@ class SchoolLoginService {
   if (singleMatch != null) {
     return (
       startWeek: singleMatch.group(1)!,
-      endWeek: singleMatch.group(1)!,
+      endWeek: singleMatch.group(2)!,
       isOddWeek: null,
     );
   }
