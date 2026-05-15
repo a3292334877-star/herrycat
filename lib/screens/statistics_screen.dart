@@ -10,7 +10,7 @@ class StatisticsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('课程统计'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
       ),
       body: Consumer<CourseProvider>(
         builder: (context, provider, child) {
@@ -35,7 +35,7 @@ class StatisticsScreen extends StatelessWidget {
                 context,
                 icon: Icons.access_time,
                 title: '每周总课时',
-                value: '${totalHours.toStringAsFixed(1)}',
+                value: totalHours.toStringAsFixed(1),
                 subtitle: '小时/周',
                 color: Colors.green,
               ),

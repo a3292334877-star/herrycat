@@ -7,6 +7,13 @@ enum WeekCycle {
   even,  // 双周
 }
 
+/// 课程性质
+enum CourseNature {
+  required,  // 必修
+  elective,  // 选修
+  public,    // 公选
+}
+
 class Course {
   final String id;
   final String name;
@@ -17,6 +24,9 @@ class Course {
   final String location;
   final Color color;
   final WeekCycle weekCycle;
+  final CourseNature nature;     // 必修/选修/公选
+  final double credits;          // 学分
+  final String weekRange;        // 周数范围，如 "1-16周"
 
   Course({
     required this.id,
@@ -28,7 +38,21 @@ class Course {
     required this.location,
     required this.color,
     this.weekCycle = WeekCycle.all,
+    this.nature = CourseNature.required,
+    this.credits = 0.0,
+    this.weekRange = '1-16周',
   });
+
+  String get natureLabel {
+    switch (nature) {
+      case CourseNature.required:
+        return '必修';
+      case CourseNature.elective:
+        return '选修';
+      case CourseNature.public:
+        return '公选';
+    }
+  }
 
   Map<String, dynamic> toMap() {
     return {
@@ -41,6 +65,9 @@ class Course {
       'location': location,
       'color': color.value,
       'weekCycle': weekCycle.index,
+      'nature': nature.index,
+      'credits': credits,
+      'weekRange': weekRange,
     };
   }
 
@@ -48,13 +75,16 @@ class Course {
     return Course(
       id: map['id'],
       name: map['name'],
-      teacher: map['teacher'],
+      teacher: map['teacher'] ?? '',
       dayOfWeek: map['dayOfWeek'],
       startTime: map['startTime'],
       endTime: map['endTime'],
-      location: map['location'],
-      color: Color(map['color']),
+      location: map['location'] ?? '',
+      color: Color(map['color'] ?? 0xFF5B9BF5),
       weekCycle: WeekCycle.values[map['weekCycle'] ?? 0],
+      nature: CourseNature.values[map['nature'] ?? 0],
+      credits: (map['credits'] ?? 0.0).toDouble(),
+      weekRange: map['weekRange'] ?? '1-16周',
     );
   }
 
@@ -68,6 +98,9 @@ class Course {
     String? location,
     Color? color,
     WeekCycle? weekCycle,
+    CourseNature? nature,
+    double? credits,
+    String? weekRange,
   }) {
     return Course(
       id: id ?? this.id,
@@ -79,6 +112,9 @@ class Course {
       location: location ?? this.location,
       color: color ?? this.color,
       weekCycle: weekCycle ?? this.weekCycle,
+      nature: nature ?? this.nature,
+      credits: credits ?? this.credits,
+      weekRange: weekRange ?? this.weekRange,
     );
   }
 

@@ -24,7 +24,7 @@ class CourseProvider extends ChangeNotifier {
     final dbPath = await getDatabasesPath();
     _db = await openDatabase(
       p.join(dbPath, 'Henrycat.db'),
-      version: 2,
+      version: 3,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE courses (
@@ -36,7 +36,10 @@ class CourseProvider extends ChangeNotifier {
             endTime TEXT NOT NULL,
             location TEXT,
             color INTEGER NOT NULL,
-            weekCycle INTEGER DEFAULT 0
+            weekCycle INTEGER DEFAULT 0,
+            nature INTEGER DEFAULT 0,
+            credits REAL DEFAULT 0.0,
+            weekRange TEXT DEFAULT "1-16周"
           )
         ''');
       },
@@ -44,6 +47,12 @@ class CourseProvider extends ChangeNotifier {
         // v1 -> v2: add weekCycle column
         if (oldVersion < 2) {
           await db.execute('ALTER TABLE courses ADD COLUMN weekCycle INTEGER DEFAULT 0');
+        }
+        // v2 -> v3: add nature, credits, weekRange columns
+        if (oldVersion < 3) {
+          await db.execute('ALTER TABLE courses ADD COLUMN nature INTEGER DEFAULT 0');
+          await db.execute('ALTER TABLE courses ADD COLUMN credits REAL DEFAULT 0.0');
+          await db.execute('ALTER TABLE courses ADD COLUMN weekRange TEXT DEFAULT "1-16周"');
         }
       },
     );

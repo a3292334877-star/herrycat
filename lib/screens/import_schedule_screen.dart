@@ -86,7 +86,7 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
         final weekInfo = parseWeekInfo(skzc);
 
         // 生成唯一 ID
-        final courseId = '${kcm}_${skxq}_$startSec\_${DateTime.now().millisecondsSinceEpoch}_$random';
+        final courseId = '${kcm}_${skxq}_${startSec}_${DateTime.now().millisecondsSinceEpoch}_${random.nextInt(99999)}';
 
         // 随机颜色
         final colors = [
@@ -95,6 +95,8 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
           0xFFEC407A, 0xFF7E57C2,
         ];
         final color = Color(colors[random.nextInt(colors.length)]);
+
+        final weekRange = '${weekInfo.startWeek}-${weekInfo.endWeek}周';
 
         final course = Course(
           id: courseId,
@@ -108,6 +110,7 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
           weekCycle: weekInfo.isOddWeek == null
               ? WeekCycle.all
               : (weekInfo.isOddWeek! ? WeekCycle.odd : WeekCycle.even),
+          weekRange: weekRange,
         );
 
         await provider.addCourse(course);
@@ -149,10 +152,6 @@ class _ImportScheduleScreenState extends State<ImportScheduleScreen> {
       13: '20:40', 14: '21:30',
     };
     return schedule[section] ?? '00:00';
-  }
-
-  (String, String) _sectionsToTimeTuple(int start, int end) {
-    return (_getSectionTime(start), _getEndTime(end));
   }
 
   String _getEndTime(int section) {

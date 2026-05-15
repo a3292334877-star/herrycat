@@ -10,6 +10,7 @@ dependencies:
   flutter:
     sdk: flutter
   provider: ^6.1.1
+  shorebird_code_push: ^1.1.6
   sqflite: ^2.3.0
   path: ^1.8.3
   shared_preferences: ^2.2.2

@@ -13,14 +13,18 @@ class CourseDetailScreen extends StatefulWidget {
 class _CourseDetailScreenState extends State<CourseDetailScreen> {
   late Course _course;
   bool _isEditing = false;
-  
+
   late TextEditingController _nameController;
   late TextEditingController _teacherController;
   late TextEditingController _locationController;
+  late TextEditingController _creditsController;
   late int _selectedDay;
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   late Color _selectedColor;
+  late WeekCycle _weekCycle;
+  late CourseNature _nature;
+  late String _weekRange;
 
   final List<Color> _colors = [
     Colors.blue, Colors.green, Colors.orange, Colors.purple,
@@ -28,6 +32,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   ];
 
   final List<String> _dayNames = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+  final List<String> _weekRanges = [
+    '1-16周', '1-18周', '1-8周', '9-16周', '1-6周', '7-12周',
+    '1-10周', '11-18周', '1-14周', '1-20周', '1-4周', '5-8周',
+  ];
 
   @override
   void initState() {
@@ -40,10 +49,14 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     _nameController = TextEditingController(text: _course.name);
     _teacherController = TextEditingController(text: _course.teacher);
     _locationController = TextEditingController(text: _course.location);
+    _creditsController = TextEditingController(text: _course.credits.toString());
     _selectedDay = _course.dayOfWeek;
     _startTime = _parseTime(_course.startTime);
     _endTime = _parseTime(_course.endTime);
     _selectedColor = _course.color;
+    _weekCycle = _course.weekCycle;
+    _nature = _course.nature;
+    _weekRange = _course.weekRange;
   }
 
   TimeOfDay _parseTime(String time) {
@@ -56,6 +69,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     _nameController.dispose();
     _teacherController.dispose();
     _locationController.dispose();
+    _creditsController.dispose();
     super.dispose();
   }
 
@@ -101,6 +115,11 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
               _buildDetailRow(Icons.calendar_today, _course.dayName),
               _buildDetailRow(Icons.access_time, _course.timeSlot),
               _buildDetailRow(Icons.location_on, _course.location.isEmpty ? '未设置' : _course.location),
+              const Divider(height: 24),
+              _buildDetailRow(Icons.category, _course.natureLabel),
+              _buildDetailRow(Icons.school, '${_course.credits} 学分'),
+              _buildDetailRow(Icons.date_range, _course.weekRange),
+              _buildDetailRow(Icons.repeat, _course.weekCycleLabel),
             ],
           ),
         ),
@@ -110,9 +129,13 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
 
   Widget _buildDetailRow(IconData icon, String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        children: [Icon(icon, size: 20), const SizedBox(width: 12), Text(text, style: const TextStyle(fontSize: 16))],
+        children: [
+          Icon(icon, size: 18, color: Colors.grey[400]),
+          const SizedBox(width: 10),
+          Text(text, style: const TextStyle(fontSize: 15)),
+        ],
       ),
     );
   }
@@ -125,12 +148,12 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
           controller: _nameController,
           decoration: const InputDecoration(labelText: '课程名称', border: OutlineInputBorder()),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         TextField(
           controller: _teacherController,
           decoration: const InputDecoration(labelText: '授课老师', border: OutlineInputBorder()),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         DropdownButtonFormField<int>(
           value: _selectedDay,
           decoration: const InputDecoration(labelText: '上课日期', border: OutlineInputBorder()),
@@ -141,7 +164,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             if (v != null) setState(() => _selectedDay = v);
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         Row(
           children: [
             Expanded(
@@ -153,7 +176,7 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
                 ),
               ),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: 12),
             Expanded(
               child: InkWell(
                 onTap: () => _selectTime(false),
@@ -165,12 +188,60 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         TextField(
           controller: _locationController,
           decoration: const InputDecoration(labelText: '上课地点', border: OutlineInputBorder()),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
+        // 课程性质
+        const Text('课程性质', style: TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        SegmentedButton<CourseNature>(
+          segments: const [
+            ButtonSegment(value: CourseNature.required, label: Text('必修')),
+            ButtonSegment(value: CourseNature.elective, label: Text('选修')),
+            ButtonSegment(value: CourseNature.public, label: Text('公选')),
+          ],
+          selected: {_nature},
+          onSelectionChanged: (set) => setState(() => _nature = set.first),
+        ),
+        const SizedBox(height: 12),
+        // 学分
+        TextFormField(
+          controller: _creditsController,
+          decoration: const InputDecoration(
+            labelText: '学分',
+            border: OutlineInputBorder(),
+            suffixText: '学分',
+          ),
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        const SizedBox(height: 12),
+        // 周数范围
+        DropdownButtonFormField<String>(
+          value: _weekRanges.contains(_weekRange) ? _weekRange : _weekRanges.first,
+          decoration: const InputDecoration(labelText: '周数范围', border: OutlineInputBorder()),
+          items: _weekRanges
+              .map((r) => DropdownMenuItem(value: r, child: Text(r)))
+              .toList(),
+          onChanged: (v) => setState(() => _weekRange = v!),
+        ),
+        const SizedBox(height: 12),
+        // 周次
+        const Text('周次', style: TextStyle(fontSize: 16)),
+        const SizedBox(height: 8),
+        SegmentedButton<WeekCycle>(
+          segments: const [
+            ButtonSegment(value: WeekCycle.all, label: Text('全周')),
+            ButtonSegment(value: WeekCycle.odd, label: Text('单周')),
+            ButtonSegment(value: WeekCycle.even, label: Text('双周')),
+          ],
+          selected: {_weekCycle},
+          onSelectionChanged: (set) => setState(() => _weekCycle = set.first),
+        ),
+        const SizedBox(height: 12),
+        // 课程颜色
         const Text('课程颜色', style: TextStyle(fontSize: 16)),
         const SizedBox(height: 8),
         Wrap(
@@ -205,15 +276,21 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
     );
     if (time != null) {
       setState(() {
-        if (isStart) _startTime = time;
-        else _endTime = time;
+        if (isStart) {
+          _startTime = time;
+        } else {
+          _endTime = time;
+        }
       });
     }
   }
 
-  String _formatTime(TimeOfDay t) => '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  String _formatTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   Future<void> _saveChanges() async {
+    final credits = double.tryParse(_creditsController.text) ?? _course.credits;
+
     final updated = _course.copyWith(
       name: _nameController.text,
       teacher: _teacherController.text,
@@ -222,6 +299,10 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
       endTime: _formatTime(_endTime),
       location: _locationController.text,
       color: _selectedColor,
+      weekCycle: _weekCycle,
+      nature: _nature,
+      credits: credits,
+      weekRange: _weekRange,
     );
 
     final provider = context.read<CourseProvider>();
@@ -252,7 +333,6 @@ class _CourseDetailScreenState extends State<CourseDetailScreen> {
   Future<void> _deleteCourse() async {
     final provider = context.read<CourseProvider>();
     final messenger = ScaffoldMessenger.of(context);
-
 
     final confirm = await showDialog<bool>(
       context: context,

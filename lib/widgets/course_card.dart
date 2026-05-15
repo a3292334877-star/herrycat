@@ -15,13 +15,19 @@ class CourseCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF2C2E33) : Colors.white;
+    final textMain = isDark ? Colors.white : Colors.black87;
+    final textSec = isDark ? Colors.grey[400]! : Colors.grey[700]!;
+    final iconColor = isDark ? Colors.grey[500]! : Colors.grey[500]!;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
       ),
-      color: const Color(0xFF2C2E33),
+      color: cardBg,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
@@ -45,10 +51,10 @@ class CourseCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       course.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: textMain,
                       ),
                     ),
                   ),
@@ -80,11 +86,11 @@ class CourseCard extends StatelessWidget {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.access_time, size: 14, color: Colors.grey[500]),
+                  Icon(Icons.access_time, size: 14, color: iconColor),
                   const SizedBox(width: 4),
                   Text(
                     course.timeSlot,
-                    style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                    style: TextStyle(fontSize: 13, color: textSec),
                   ),
                 ],
               ),
@@ -92,11 +98,11 @@ class CourseCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.location_on, size: 14, color: Colors.grey[500]),
+                    Icon(Icons.location_on, size: 14, color: iconColor),
                     const SizedBox(width: 4),
                     Text(
                       course.location,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                      style: TextStyle(fontSize: 13, color: textSec),
                     ),
                   ],
                 ),
@@ -105,11 +111,11 @@ class CourseCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
-                    Icon(Icons.person, size: 14, color: Colors.grey[500]),
+                    Icon(Icons.person, size: 14, color: iconColor),
                     const SizedBox(width: 4),
                     Text(
                       course.teacher,
-                      style: TextStyle(fontSize: 13, color: Colors.grey[400]),
+                      style: TextStyle(fontSize: 13, color: textSec),
                     ),
                   ],
                 ),

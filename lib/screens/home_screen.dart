@@ -37,21 +37,16 @@ class _HomeScreenState extends State<HomeScreen>
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF1C1E21),
+      backgroundColor: isDark ? const Color(0xFF1C1E21) : const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1C1E21),
+        backgroundColor: isDark ? const Color(0xFF1C1E21) : Colors.white,
+        foregroundColor: isDark ? Colors.white : Colors.black87,
         elevation: 0,
-        scrolledUnderElevation: 0,
-        title: const Text(
-          '📚 课程表',
-          style: TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
+        scrolledUnderElevation: isDark ? 0 : 1,
+        title: const Text('课程表', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20)),
         bottom: PreferredSize(
           preferredSize: Size.fromHeight(_weeklyGridMode ? 48 : 96),
           child: Column(
@@ -60,14 +55,14 @@ class _HomeScreenState extends State<HomeScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: TextField(
                   controller: _searchController,
-                  style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: isDark ? Colors.white : Colors.black87),
                   decoration: InputDecoration(
                     hintText: '搜索课程...',
-                    hintStyle: TextStyle(color: Colors.grey[500]),
-                    prefixIcon: Icon(Icons.search, color: Colors.grey[500]),
+                    hintStyle: TextStyle(color: isDark ? Colors.grey[500] : Colors.grey[600]),
+                    prefixIcon: Icon(Icons.search, color: isDark ? Colors.grey[500] : Colors.grey[600]),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: Icon(Icons.clear, color: Colors.grey[500]),
+                            icon: Icon(Icons.clear, color: isDark ? Colors.grey[500] : Colors.grey[600]),
                             onPressed: () {
                               _searchController.clear();
                               setState(() => _searchQuery = '');
@@ -79,7 +74,7 @@ class _HomeScreenState extends State<HomeScreen>
                       borderSide: BorderSide.none,
                     ),
                     filled: true,
-                    fillColor: const Color(0xFF2C2E33),
+                    fillColor: isDark ? const Color(0xFF2C2E33) : Colors.grey[200],
                     contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   ),
                   onChanged: (v) => setState(() => _searchQuery = v.toLowerCase()),
@@ -91,8 +86,8 @@ class _HomeScreenState extends State<HomeScreen>
                   child: TabBar(
                     controller: _tabController,
                     isScrollable: true,
-                    labelColor: Colors.white,
-                    unselectedLabelColor: Colors.grey[500],
+                    labelColor: isDark ? Colors.white : Colors.black87,
+                    unselectedLabelColor: isDark ? Colors.grey[500] : Colors.grey[600],
                     indicatorColor: colorScheme.primary,
                     indicatorWeight: 3,
                     dividerColor: Colors.transparent,
@@ -106,25 +101,25 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         actions: [
           IconButton(
-            icon: Icon(_weeklyGridMode ? Icons.view_list : Icons.grid_view, color: Colors.white),
+            icon: Icon(_weeklyGridMode ? Icons.view_list : Icons.grid_view, color: isDark ? Colors.white : Colors.black87),
             tooltip: _weeklyGridMode ? '切换列表' : '切换周视图',
             onPressed: () => setState(() => _weeklyGridMode = !_weeklyGridMode),
           ),
           IconButton(
-            icon: const Icon(Icons.bar_chart, color: Colors.white),
+            icon: Icon(Icons.bar_chart, color: isDark ? Colors.white : Colors.black87),
             onPressed: () => Navigator.pushNamed(context, '/statistics'),
           ),
           IconButton(
-            icon: const Icon(Icons.download, color: Colors.white),
+            icon: Icon(Icons.download, color: isDark ? Colors.white : Colors.black87),
             tooltip: '导入课表',
             onPressed: _importSchedule,
           ),
           IconButton(
-            icon: const Icon(Icons.share, color: Colors.white),
+            icon: Icon(Icons.share, color: isDark ? Colors.white : Colors.black87),
             onPressed: _shareSchedule,
           ),
           IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
+            icon: Icon(Icons.settings, color: isDark ? Colors.white : Colors.black87),
             onPressed: () => Navigator.pushNamed(context, '/settings'),
           ),
         ],
@@ -162,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen>
         backgroundColor: colorScheme.primary,
         foregroundColor: Colors.white,
         onPressed: () => Navigator.pushNamed(context, '/add'),
-        child: const Icon(Icons.add),
+        child: Icon(Icons.add, color: isDark ? Colors.white : Colors.white),
       ),
     );
   }
@@ -173,7 +168,7 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey[600]),
+            Icon(Icons.search_off, size: 64, color: Theme.of(context).brightness == Brightness.dark ? Colors.grey[600] : Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               '没有找到"$_searchQuery"相关的课程',
@@ -203,7 +198,7 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.event_available, size: 64, color: Colors.grey[600]),
+            Icon(Icons.event_available, size: 64, color: Theme.of(context).brightness == Brightness.dark ? Colors.grey[600] : Colors.grey[400]),
             const SizedBox(height: 16),
             Text(
               '这天没课～',
@@ -234,12 +229,13 @@ class _HomeScreenState extends State<HomeScreen>
   void _showSwapDialog(Course course) {
     final provider = context.read<CourseProvider>();
     final courses = provider.getCoursesForDay(course.dayOfWeek);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF2C2E33),
-        title: const Text('换课', style: TextStyle(color: Colors.white)),
+        backgroundColor: isDark ? const Color(0xFF2C2E33) : Colors.white,
+        title: Text('换课', style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -249,8 +245,8 @@ class _HomeScreenState extends State<HomeScreen>
               final other = courses[index];
               if (other.id == course.id) return const SizedBox.shrink();
               return ListTile(
-                title: Text(other.name, style: const TextStyle(color: Colors.white)),
-                subtitle: Text(other.timeSlot, style: TextStyle(color: Colors.grey[400])),
+                title: Text(other.name, style: TextStyle(color: isDark ? Colors.white : Colors.black87)),
+                subtitle: Text(other.timeSlot, style: TextStyle(color: isDark ? Colors.grey[400] : Colors.grey[600])),
                 onTap: () {
                   provider.swapCourses(course.id, other.id);
                   Navigator.pop(context);
