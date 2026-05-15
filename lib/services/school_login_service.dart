@@ -141,19 +141,27 @@ class SchoolLoginService {
 
   /// 获取初始 Session Cookie
   Future<void> _getInitialSession(List<String> log) async {
-    try {
-      final resp = await http
-          .get(Uri.parse('$_baseUrl/jwglxt/xtgl/login_slogin.html'),
-              headers: _headers)
-          .timeout(const Duration(seconds: 8));
-      final cookies = _extractCookies(resp);
-      if (cookies.isNotEmpty) {
-        _cookies = cookies;
-        log.add('✓ 获取初始Session');
+    for (final initPath in [
+      '/jwglxt/xtgl/login_slogin.html',
+      '/',
+      '/jwapp/sys/emaphome/login.do',
+    ]) {
+      try {
+        final resp = await http
+            .get(Uri.parse('$_baseUrl$initPath'), headers: _headers)
+            .timeout(const Duration(seconds: 8));
+        final cookies = _extractCookies(resp);
+        if (cookies.isNotEmpty) {
+          _cookies = cookies;
+          log.add('✓ 初始Session ($initPath)');
+          return;
+        }
+        log.add('  init $initPath → HTTP ${resp.statusCode} (无cookie)');
+      } catch (e) {
+        log.add('  init $initPath → $e');
       }
-    } catch (_) {
-      // 非致命
     }
+    log.add('⚠ 未获取到初始Session Cookie');
   }
 
   /// 尝试一次登录
@@ -350,9 +358,7 @@ class SchoolLoginService {
 
   /// 抓取课表
   Future<List<Map<String, dynamic>>> fetchSchedule() async {
-    if (_cookies.isEmpty) {
-      throw Exception('未登录，请先调用 login()');
-    }
+    // 登录已成功，直接尝试（即使cookie为空也走请求）
 
     final termCode = await _getCurrentTerm();
     final errors = <String>[];
