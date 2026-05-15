@@ -271,43 +271,36 @@ class SchoolLoginService {
       '/jwapp/sys/kcbcxmdl/modules/qxkccxx/qxkccxx.do',
       '/jwapp/sys/kcbcxmdl/modules/qxkcb/qxkccxx.do',
       '/jwglxt/kbcx/xskbcx_cxXsKb.html',
+      '/jwglxt/kbcx/xskbcx_cxXsgrkb.html',
     ]) {
-      try {
-        http.Response r;
-        if (path.contains('jwglxt')) {
-          r = await http.post(
+      for (final tryBody in _buildScheduleBodies(termCode, path)) {
+        try {
+          final r = await http.post(
             Uri.parse('$_baseUrl$path'),
             headers: _headerWithCookie,
-            body: 'xnm=${termCode.substring(0, 4)}&xqm=${_termToXqm(termCode)}&kzlx=ck',
+            body: tryBody,
           ).timeout(const Duration(seconds: 10));
-        } else {
-          r = await http.post(
-            Uri.parse('$_baseUrl$path'),
-            headers: _headerWithCookie,
-            body: jsonEncode({
-              'XNXQDM': termCode,
-              '*json': '1',
-              'querySetting': jsonEncode([
-                {'name': 'XNXQDM', 'value': termCode, 'linkOpt': 'and', 'builder': 'equal'},
-              ]),
-              '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
-            }),
-          ).timeout(const Duration(seconds: 10));
-        }
 
-        final body = r.body.trim();
-        if (body.isEmpty) continue;
-        if (!body.startsWith('{')) continue;
-        resp = r;
-        break;
-      } catch (e) {
-        errors.add('$path: $e');
+          final body = r.body.trim();
+          if (body.isEmpty) { errors.add('$path → 空响应'); continue; }
+
+          if (body.startsWith('{')) {
+            resp = r;
+            break;
+          }
+
+          // HTML response
+          final snip = body.length > 60 ? body.substring(0, 60) : body;
+          errors.add('$path → HTML($snip...)');
+        } catch (e) {
+          errors.add('$path → $e');
+        }
       }
+      if (resp != null) break;
     }
 
     if (resp == null) {
-      final d = errors.isNotEmpty ? '\n${errors.take(3).join('\n')}' : '';
-      throw Exception('获取课表失败，会话可能已过期$d');
+      throw Exception('获取课表失败\n\n${errors.take(6).join('\n')}');
     }
 
     final data = jsonDecode(resp.body);
@@ -320,6 +313,28 @@ class SchoolLoginService {
         data['data']?['rows'] ?? data['datas']?['rows'] ?? data['rows'];
     if (rows is List) return rows.cast<Map<String, dynamic>>();
     return [];
+  }
+
+  List<String> _buildScheduleBodies(String termCode, String path) {
+    final xnm = termCode.substring(0, 4);
+    final xqm = _termToXqm(termCode);
+    if (path.contains('jwglxt')) {
+      return [
+        'xnm=$xnm&xqm=$xqm&kzlx=ck',
+        'XNXQDM=$termCode&xnm=$xnm&xqm=$xqm',
+        jsonEncode({'XNXQDM': termCode, 'xnm': xnm, 'xqm': xqm}),
+      ];
+    }
+    return [
+      jsonEncode({
+        'XNXQDM': termCode,
+        '*json': '1',
+        'querySetting': jsonEncode([
+          {'name': 'XNXQDM', 'value': termCode, 'linkOpt': 'and', 'builder': 'equal'},
+        ]),
+        '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
+      }),
+    ];
   }
 
   String _termToXqm(String tc) {
