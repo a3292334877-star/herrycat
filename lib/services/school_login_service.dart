@@ -2,366 +2,266 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:http/http.dart' as http;
 
-/// 深圳职业技术大学教务系统登录与课表抓取服务
+/// 深圳职业技术大学教务系统登录与课表抓取
+/// 基于新版正方教务 v6+ Web表单认证
 class SchoolLoginService {
   static const String _baseUrl = 'https://jwxt.szpu.edu.cn';
+  static const String _loginPage = '/jwglxt/xtgl/login_slogin.html';
+  static const String _pubKey = '/jwglxt/xtgl/login_getPublicKey.html';
+  static const String _schedule = '/jwglxt/kbcx/xskbcx_cxXsKb.html';
 
   String _cookies = '';
 
-  /// 登录（快速超时 + 详细日志）
+  /// 登录
   Future<bool> login(String username, String password) async {
     final log = <String>[];
 
-    // ── 0. 连通性检查 (3s) ──
+    // ── Step 1: 连通性检查 ──
     try {
-      final connResp = await http
-          .get(Uri.parse(_baseUrl))
-          .timeout(const Duration(seconds: 3));
-      log.add('✓ 可达 (HTTP ${connResp.statusCode})');
-    } on http.ClientException catch (e) {
-      final msg = e.message.toLowerCase();
-      if (msg.contains('socke') || msg.contains('dns') || msg.contains('refused')) {
-        throw Exception('❌ 无法访问教务系统\n\n请确认手机已连接深职院Campus WiFi或VPN');
-      }
-      log.add('⚠ 连通: ${e.message}');
+      final r = await http.get(Uri.parse(_baseUrl)).timeout(const Duration(seconds: 4));
+      log.add('✓ 可达(${r.statusCode})');
     } catch (e) {
-      log.add('⚠ 连通超时: $e');
+      throw Exception('❌ 无法访问教务系统\n请确认已连接深职院Campus WiFi');
     }
 
-    // ── 0.5 初始 Session (5s max) ──
-    await _getInitialSession(log);
-
-    // ── 1. RSA 公钥 (5s max) ──
-    String? modulus;
+    // ── Step 2: GET 登录页 → 拿 cookie + RSA 公钥 ──
+    String modulus = '';
     String exponentHex = '10001';
 
-    for (final keyPath in [
-      '/jwglxt/xtgl/login_getPublicKey.html',
-      '/jwglxt/xtgl/login/login_getPublicKey.html',
-      '/jwapp/sys/emaphome/getRSAKey.do',
-      '/jwapp/sys/emaphome/getRSAKey',
-    ]) {
-      try {
-        final preResp = await http
-            .get(Uri.parse('$_baseUrl$keyPath'), headers: _headerWithCookie)
-            .timeout(const Duration(seconds: 4));
+    try {
+      final r = await http.get(
+        Uri.parse('$_baseUrl$_loginPage'),
+        headers: _webHeaders,
+      ).timeout(const Duration(seconds: 5));
 
-        final body = preResp.body.trim();
-        if (body.isEmpty) continue;
+      _cookies = _extractCookies(r);
+      final html = r.body;
+
+      if (_cookies.isNotEmpty) log.add('✓ cookie');
+
+      // 从 HTML 提取 RSA 公钥
+      for (final re in [
+        RegExp(r"""var\s+modulus\s*=\s*['"]([^'"]+)['"]"""),
+        RegExp(r"""modulus['"]\s*:\s*['"]([^'"]+)['"]"""),
+        RegExp(r"""loginPublicKey\s*=\s*['"]([^'"]+)['"]"""),
+      ]) {
+        final m = re.firstMatch(html);
+        if (m != null) { modulus = m.group(1)!; break; }
+      }
+      for (final re in [
+        RegExp(r"""var\s+exponent\s*=\s*['"]([^'"]+)['"]"""),
+        RegExp(r"""exponent['"]\s*:\s*['"]([^'"]+)['"]"""),
+      ]) {
+        final m = re.firstMatch(html);
+        if (m != null) { exponentHex = m.group(1)!; break; }
+      }
+      log.add(modulus.isNotEmpty ? '✓ RSA(HTML)' : '⚠ RSA需API获取');
+    } catch (e) {
+      log.add('⚠ 登录页: $e');
+    }
+
+    // ── Step 2b: 如果HTML没提取到，走 API 获取 ──
+    if (modulus.isEmpty) {
+      try {
+        final r = await http.get(
+          Uri.parse('$_baseUrl$_pubKey'),
+          headers: _cookieHeaders,
+        ).timeout(const Duration(seconds: 4));
+        final body = r.body.trim();
         if (body.startsWith('{')) {
-          final data = jsonDecode(body);
-          modulus = data['modulus'] ?? data['data']?['modulus'] ?? '';
-          exponentHex = data['exponent'] ?? data['data']?['exponent'] ?? '10001';
-          if (modulus != null && modulus.isNotEmpty) {
-            log.add('✓ RSA公钥 ($keyPath)');
-            break;
-          }
+          final d = jsonDecode(body);
+          modulus = d['modulus'] ?? d['data']?['modulus'] ?? '';
+          exponentHex = d['exponent'] ?? d['data']?['exponent'] ?? '10001';
+          if (modulus.isNotEmpty) log.add('✓ RSA(API)');
         }
       } catch (_) {}
     }
 
-    // 从 HTML 提取
-    if (modulus == null || modulus.isEmpty) {
+    // ── Step 3: RSA 加密密码 ──
+    String passwordEncoded;
+    if (modulus.isNotEmpty) {
       try {
-        final pageResp = await http
-            .get(Uri.parse('$_baseUrl/jwglxt/xtgl/login_slogin.html'), headers: _headerWithCookie)
-            .timeout(const Duration(seconds: 4));
-        final html = pageResp.body;
-        final modMatch =
-            RegExp(r"modulus\s*=\s*'([^']+)'").firstMatch(html) ??
-            RegExp(r'modulus\s*=\s*"([^"]+)"').firstMatch(html);
-        final expMatch =
-            RegExp(r"exponent\s*=\s*'([^']+)'").firstMatch(html) ??
-            RegExp(r'exponent\s*=\s*"([^"]+)"').firstMatch(html);
-        if (modMatch != null) {
-          modulus = modMatch.group(1)!;
-          if (expMatch != null) exponentHex = expMatch.group(1)!;
-          log.add('✓ RSA(HTML提取)');
-        }
-      } catch (_) {}
-    }
-    if (modulus == null || modulus.isEmpty) log.add('⚠ 无RSA公钥');
-
-    // ── 2. 加密 ──
-    String? encryptedPwd;
-    if (modulus != null && modulus.isNotEmpty) {
-      try {
-        encryptedPwd = _rsaEncrypt(password, modulus, exponentHex);
-      } catch (_) {}
+        passwordEncoded = _rsaEncrypt(password, modulus, exponentHex);
+      } catch (_) {
+        passwordEncoded = password;
+      }
+    } else {
+      passwordEncoded = password;
     }
 
-    // ── 3. 登录 (每条路径5s) ──
-    final loginPaths = [
-      '/jwglxt/xtgl/login_slogin.html',
-      '/jwapp/sys/emaphome/login.do',
-      '/jwapp/sys/emaphome/login',
+    // ── Step 4: POST 登录（Web表单格式） ──
+    final loginUrl = '$_baseUrl$_loginPage';
+    final bodies = [
+      // 格式1: 新版正方标准字段
+      'yhm=${Uri.encodeComponent(username)}&mm=${Uri.encodeComponent(passwordEncoded)}',
+      // 格式2: 旧版字段名
+      'userAccount=${Uri.encodeComponent(username)}&userPassword=${Uri.encodeComponent(passwordEncoded)}',
+      // 格式3: JSON(某些配置)
+      jsonEncode({'yhm': username, 'mm': passwordEncoded}),
+      // 格式4: 明文
+      'yhm=${Uri.encodeComponent(username)}&mm=${Uri.encodeComponent(password)}',
     ];
 
-    // 策略A: RSA加密 JSON
-    if (encryptedPwd != null) {
-      for (final path in loginPaths) {
-        final r = await _tryLogin(path, username, encryptedPwd, log);
-        if (r != null) { _cookies = r; return true; }
-      }
-    }
-
-    // 策略B: 明文 JSON
-    for (final path in loginPaths) {
-      final r = await _tryLogin(path, username, password, log);
-      if (r != null) { _cookies = r; return true; }
-    }
-
-    // 策略C: form body (仅旧版路径)
-    for (final path in ['/jwapp/sys/emaphome/login.do', '/jwapp/sys/emaphome/login']) {
-      final r = await _tryLoginForm(path, username, password, log);
-      if (r != null) { _cookies = r; return true; }
-    }
-
-    throw Exception('登录失败\n\n${log.join('\n')}');
-  }
-
-  Future<void> _getInitialSession(List<String> log) async {
-    for (final path in ['/', '/jwglxt/xtgl/login_slogin.html', '/jwapp/sys/emaphome/login.do']) {
+    String? lastErr;
+    for (final body in bodies) {
       try {
-        final resp = await http
-            .get(Uri.parse('$_baseUrl$path'), headers: _headers)
-            .timeout(const Duration(seconds: 3));
-        final c = _extractCookies(resp);
-        if (c.isNotEmpty) { _cookies = c; log.add('✓ cookie($path)'); return; }
-      } catch (_) {}
+        final isJson = body.startsWith('{');
+        final r = await http.post(
+          Uri.parse(loginUrl),
+          headers: {
+            ..._cookieHeaders,
+            'Content-Type': isJson
+                ? 'application/json; charset=UTF-8'
+                : 'application/x-www-form-urlencoded; charset=UTF-8',
+            'Referer': loginUrl,
+          },
+          body: body,
+        ).timeout(const Duration(seconds: 6));
+
+        final respBody = r.body.trim();
+        final newCookies = _mergeCookies(_cookies, _extractCookies(r));
+
+        // 登录成功 = 重定向到首页 或 JSON success
+        if (r.statusCode == 302 ||
+            (respBody.startsWith('{') && _isSuccess(respBody))) {
+          _cookies = newCookies;
+          log.add('✓ 登录成功');
+          return true;
+        }
+
+        // 401/密码错误
+        if (r.statusCode == 401 ||
+            (respBody.startsWith('{') && respBody.contains('密码'))) {
+          final msg = respBody.startsWith('{')
+              ? (jsonDecode(respBody)['msg'] ?? '密码错误')
+              : '密码错误';
+          lastErr = msg;
+          continue;
+        }
+
+        // 得到新cookie → 可能成功
+        if (newCookies.isNotEmpty && newCookies != _cookies) {
+          _cookies = newCookies;
+          log.add('✓ 登录(cookie)');
+          return true;
+        }
+      } catch (e) {
+        lastErr = e.toString();
+      }
     }
+
+    if (lastErr != null) throw Exception(lastErr);
+    throw Exception('登录失败\n${log.join('\n')}');
   }
 
-  Future<String?> _tryLogin(
-      String path, String username, String password, List<String> log) async {
+  bool _isSuccess(String body) {
     try {
-      final resp = await http.post(
-        Uri.parse('$_baseUrl$path'),
-        headers: _headerWithCookie,
-        body: jsonEncode({'loginName': username, 'password': password}),
-      ).timeout(const Duration(seconds: 5));
-
-      final body = resp.body.trim();
-      final cookies = _mergeCookies(_cookies, _extractCookies(resp));
-
-      // JSON 响应
-      if (body.startsWith('{')) {
-        final data = jsonDecode(body);
-        final ok = data['code'] == '0' || data['code'] == 0 ||
-            data['success'] == true || data['success'] == 'true';
-        if (ok) { log.add('✓ 登录成功 ($path)'); return cookies; }
-        final msg = data['msg'] ?? data['message'] ?? '';
-        if (msg.isNotEmpty) log.add('  $path → $msg');
-        return null;
-      }
-
-      // 302 重定向
-      if (resp.statusCode == 302) {
-        log.add('✓ 登录(302 $path)');
-        return cookies;
-      }
-
-      // 401/404
-      if (resp.statusCode == 401) { log.add('  $path → 401'); return null; }
-      if (resp.statusCode == 404) { log.add('  $path → 404'); return null; }
-
-      // HTML — 可能登录成功（重定向到首页）
-      if (cookies.isNotEmpty && cookies != _cookies) {
-        log.add('✓ 登录($path HTML+cookie)');
-        return cookies;
-      }
-
-      log.add('  $path → HTTP ${resp.statusCode}');
-    } catch (e) {
-      log.add('  $path → $e');
+      final d = jsonDecode(body);
+      return d['code'] == '0' || d['code'] == 0 || d['success'] == true;
+    } catch (_) {
+      return false;
     }
-    return null;
   }
 
-  Future<String?> _tryLoginForm(
-      String path, String username, String password, List<String> log) async {
-    try {
-      final resp = await http.post(
-        Uri.parse('$_baseUrl$path'),
-        headers: {
-          ..._headerWithCookie,
-          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        },
-        body: 'loginName=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(password)}',
-      ).timeout(const Duration(seconds: 5));
-      final cookies = _mergeCookies(_cookies, _extractCookies(resp));
-      if (cookies.isNotEmpty && cookies != _cookies) { log.add('✓ 登录(form $path)'); return cookies; }
-      log.add('  form $path → HTTP ${resp.statusCode}');
-    } catch (e) {
-      log.add('  form $path → $e');
+  // ── 课表查询 ──
+  Future<List<Map<String, dynamic>>> fetchSchedule() async {
+    final log = <String>[];
+    final now = DateTime.now();
+    final year = now.year - (now.month < 9 ? 1 : 0);
+    final xqm = (now.month >= 2 && now.month <= 7) ? '12' : '3';
+
+    final bodies = [
+      'xnm=$year&xqm=$xqm&kzlx=ck',
+      'xnm=$year&xqm=$xqm',
+      jsonEncode({'xnm': year.toString(), 'xqm': xqm}),
+      jsonEncode({'XNXQDM': '$year-${year+1}-${xqm == "3" ? "1" : "2"}'}),
+    ];
+
+    for (final body in bodies) {
+      final isJson = body.startsWith('{');
+      try {
+        final r = await http.post(
+          Uri.parse('$_baseUrl$_schedule'),
+          headers: {
+            ..._cookieHeaders,
+            'Content-Type': isJson
+                ? 'application/json'
+                : 'application/x-www-form-urlencoded',
+            'Referer': '$_baseUrl/jwglxt/xtgl/index_initMenu.html',
+          },
+          body: body,
+        ).timeout(const Duration(seconds: 8));
+
+        final respBody = r.body.trim();
+        if (respBody.isEmpty) { log.add('  → 空响应'); continue; }
+        if (!respBody.startsWith('{')) {
+          log.add('  → HTML(${respBody.length}b)');
+          continue;
+        }
+
+        final data = jsonDecode(respBody);
+        // 新版正方: { kbList: [...], ... }
+        final rows = data['kbList'] ??
+            data['datas']?['kbList'] ??
+            data['datas']?['qxkccxx']?['rows'] ??
+            data['rows'];
+        if (rows is List && rows.isNotEmpty) {
+          return rows.cast<Map<String, dynamic>>();
+        }
+        log.add('  → JSON无数据');
+      } catch (e) {
+        log.add('  → $e');
+      }
     }
-    return null;
+
+    throw Exception('获取课表失败\n${log.join('\n')}');
   }
 
-  // ── Cookie 工具 ──
-
+  // ── Cookie ──
   String _extractCookies(http.Response resp) {
     final h = resp.headers['set-cookie'] ?? '';
     if (h.isEmpty) return '';
-    final cookies = <String>[];
+    final cs = <String>[];
     for (final p in h.split(',')) {
       final t = p.trim();
       final i = t.indexOf(';');
       final kv = i > 0 ? t.substring(0, i) : t;
-      if (kv.contains('=')) cookies.add(kv);
+      if (kv.contains('=')) cs.add(kv);
     }
-    return cookies.join('; ');
+    return cs.join('; ');
   }
 
   String _mergeCookies(String old, String add) =>
       add.isEmpty ? old : old.isEmpty ? add : '$old; $add';
 
   // ── RSA ──
-
-  String _rsaEncrypt(String plaintext, String modulusHex, String exponentHex) {
-    final n = BigInt.parse(modulusHex, radix: 16);
-    final e = BigInt.parse(exponentHex, radix: 16);
-    final kb = (n.bitLength + 7) >> 3;
-    final pl = kb - plaintext.length - 3;
-    if (pl < 8) throw Exception('密码过长');
+  String _rsaEncrypt(String text, String modHex, String expHex) {
+    final n = BigInt.parse(modHex, radix: 16);
+    final e = BigInt.parse(expHex, radix: 16);
+    final kl = (n.bitLength + 7) >> 3;
+    final pl = kl - text.length - 3;
+    if (pl < 8) return text;
     final rng = Random.secure();
     final ps = List<int>.generate(pl, (_) { int b; do { b = rng.nextInt(256); } while (b == 0); return b; });
-    final t = utf8.encode(plaintext);
-    final em = [0x00, 0x02, ...ps, 0x00, ...t];
-    final m = _bytesToBigInt(em);
-    final c = _modexp(m, e, n);
-    return _bigIntToHex(c);
+    final em = [0x00, 0x02, ...ps, 0x00, ...utf8.encode(text)];
+    final m = em.fold(BigInt.zero, (a, x) => (a << 8) + BigInt.from(x));
+    BigInt r = BigInt.one, b = m, x = e;
+    while (x > BigInt.zero) { if (x & BigInt.one == BigInt.one) r = (r * b) % n; b = (b * b) % n; x >>= 1; }
+    final h = r.toRadixString(16);
+    return h.length.isOdd ? '0$h' : h;
   }
 
-  BigInt _bytesToBigInt(List<int> b) => b.fold(BigInt.zero, (a, x) => (a << 8) + BigInt.from(x));
-  String _bigIntToHex(BigInt v) { final h = v.toRadixString(16); return h.length.isOdd ? '0$h' : h; }
-  BigInt _modexp(BigInt base, BigInt exp, BigInt mod) {
-    BigInt r = BigInt.one, b = base, e = exp;
-    while (e > BigInt.zero) { if (e & BigInt.one == BigInt.one) r = (r * b) % mod; b = (b * b) % mod; e >>= 1; }
-    return r;
-  }
-
-  // ── Headers ──
-
-  Map<String, String> get _headers => {
-    'Accept': 'text/html,application/json;q=0.9,*/*;q=0.8',
+  Map<String, String> get _webHeaders => {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9',
-    'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
-        'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
-    'Origin': _baseUrl,
-    'Referer': '$_baseUrl/jwglxt/xtgl/login_slogin.html',
   };
 
-  Map<String, String> get _headerWithCookie => {
-    ..._headers,
+  Map<String, String> get _cookieHeaders => {
+    ..._webHeaders,
     if (_cookies.isNotEmpty) 'Cookie': _cookies,
   };
-
-  // ── 课表 ──
-
-  Future<List<Map<String, dynamic>>> fetchSchedule() async {
-    final termCode = await _getCurrentTerm();
-    final errors = <String>[];
-
-    http.Response? resp;
-    for (final path in [
-      '/jwapp/sys/kcbcxmdl/modules/qxkcp/qxkccxx.do',
-      '/jwapp/sys/kcbcxmdl/modules/qxkcp/qxkccxx',
-      '/jwapp/sys/kcbcxmdl/modules/qxkcp/queryKccxx',
-      '/jwapp/sys/kcbcxmdl/modules/qxkccxx/qxkccxx.do',
-      '/jwapp/sys/kcbcxmdl/modules/qxkcb/qxkccxx.do',
-      '/jwglxt/kbcx/xskbcx_cxXsKb.html',
-      '/jwglxt/kbcx/xskbcx_cxXsgrkb.html',
-    ]) {
-      for (final tryBody in _buildScheduleBodies(termCode, path)) {
-        try {
-          final r = await http.post(
-            Uri.parse('$_baseUrl$path'),
-            headers: _headerWithCookie,
-            body: tryBody,
-          ).timeout(const Duration(seconds: 10));
-
-          final body = r.body.trim();
-          if (body.isEmpty) { errors.add('$path → 空响应'); continue; }
-
-          if (body.startsWith('{')) {
-            resp = r;
-            break;
-          }
-
-          // HTML response
-          final snip = body.length > 60 ? body.substring(0, 60) : body;
-          errors.add('$path → HTML($snip...)');
-        } catch (e) {
-          errors.add('$path → $e');
-        }
-      }
-      if (resp != null) break;
-    }
-
-    if (resp == null) {
-      throw Exception('获取课表失败\n\n${errors.take(6).join('\n')}');
-    }
-
-    final data = jsonDecode(resp.body);
-    final code = data['code'];
-    if (code != null && code != '0' && code != 0 && data['success'] != true) {
-      throw Exception(data['msg'] ?? data['message'] ?? '获取课表失败');
-    }
-
-    final rows = data['datas']?['qxkccxx']?['rows'] ??
-        data['data']?['rows'] ?? data['datas']?['rows'] ?? data['rows'];
-    if (rows is List) return rows.cast<Map<String, dynamic>>();
-    return [];
-  }
-
-  List<String> _buildScheduleBodies(String termCode, String path) {
-    final xnm = termCode.substring(0, 4);
-    final xqm = _termToXqm(termCode);
-    if (path.contains('jwglxt')) {
-      return [
-        'xnm=$xnm&xqm=$xqm&kzlx=ck',
-        'XNXQDM=$termCode&xnm=$xnm&xqm=$xqm',
-        jsonEncode({'XNXQDM': termCode, 'xnm': xnm, 'xqm': xqm}),
-      ];
-    }
-    return [
-      jsonEncode({
-        'XNXQDM': termCode,
-        '*json': '1',
-        'querySetting': jsonEncode([
-          {'name': 'XNXQDM', 'value': termCode, 'linkOpt': 'and', 'builder': 'equal'},
-        ]),
-        '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
-      }),
-    ];
-  }
-
-  String _termToXqm(String tc) {
-    final p = tc.split('-');
-    if (p.length >= 3) {
-      switch (p[2]) { case '1': return '3'; case '2': return '12'; }
-    }
-    return '12';
-  }
-
-  Future<String> _getCurrentTerm() async {
-    for (final p in [
-      '/jwapp/sys/emaphome/getQXQDMCurrent.do',
-      '/jwapp/sys/emaphome/getCurrentTerm',
-    ]) {
-      try {
-        final r = await http.get(Uri.parse('$_baseUrl$p'), headers: _headerWithCookie)
-            .timeout(const Duration(seconds: 5));
-        final b = r.body.trim();
-        if (!b.startsWith('{')) continue;
-        final d = jsonDecode(b);
-        final t = d['data']?['QXXQDM'] ?? d['QXXQDM'] ?? '';
-        if (t.isNotEmpty) return t;
-      } catch (_) {}
-    }
-    return '2025-2026-2';
-  }
 }
 
 /// 从 SKJC 字段解析节次
