@@ -3,13 +3,13 @@ import 'dart:math';
 import 'package:http/http.dart' as http;
 
 /// 深圳职业技术大学教务系统登录与课表抓取服务
+/// 适配新版正方教务系统（2026）
 class SchoolLoginService {
   static const String _baseUrl = 'https://jwxt.szpu.edu.cn';
 
-  String? _sessionId;
   String _cookies = '';
 
-  /// 登录（带详细调试信息）
+  /// 登录
   Future<bool> login(String username, String password) async {
     final log = <String>[];
 
@@ -25,192 +25,251 @@ class SchoolLoginService {
         throw Exception(
             '❌ 无法访问教务系统\n\n'
             '请确认手机已连接 深职院Campus WiFi\n'
-            '或已启用深职院VPN\n\n'
-            '(当前网络无法到达 jwxt.szpu.edu.cn)');
+            '或已启用深职院VPN');
       }
-      log.add('⚠ 连通检查异常: ${e.message}');
+      log.add('⚠ 连通检查: ${e.message}');
     } catch (e) {
-      log.add('⚠ 连通检查超时/异常: ${e.toString().length > 80 ? e.toString().substring(0, 80) : e}');
+      log.add('⚠ 连通检查: $e');
     }
 
-    // ── 1. RSA 公钥 ──
+    // ── 0.5 获取初始 Session（新版教务需要先访问首页拿 cookie） ──
+    await _getInitialSession(log);
+
+    // ── 1. RSA 公钥（新版路径 + 旧版路径 + 从HTML提取） ──
     String? modulus;
     String exponentHex = '10001';
+
+    // 新版教务 API 路径
     for (final keyPath in [
+      '/jwglxt/xtgl/login_getPublicKey.html',
+      '/jwglxt/xtgl/login_getPublicKey',
+      '/jwglxt/xtgl/login/login_getPublicKey.html',
       '/jwapp/sys/emaphome/getRSAKey.do',
       '/jwapp/sys/emaphome/getRSAKey',
       '/jwapp/sys/login/getRSAKey',
     ]) {
       try {
         final preResp = await http
-            .get(Uri.parse('$_baseUrl$keyPath'), headers: _headers)
+            .get(Uri.parse('$_baseUrl$keyPath'), headers: _cookiesHeader)
             .timeout(const Duration(seconds: 8));
+
         final body = preResp.body.trim();
-        if (body.isEmpty) { log.add('  RSA $keyPath → 空响应'); continue; }
-        if (body.startsWith('<') || !body.startsWith('{')) {
-          log.add('  RSA $keyPath → 非JSON (${body.length > 60 ? '${body.substring(0, 60)}...' : body})');
-          continue;
+        if (body.isEmpty) continue;
+
+        // 尝试 JSON 解析
+        if (body.startsWith('{')) {
+          final preData = jsonDecode(body);
+          modulus = preData['modulus'] ?? preData['data']?['modulus'] ?? '';
+          exponentHex = preData['exponent'] ?? preData['data']?['exponent'] ?? '10001';
+          if (modulus != null && modulus.isNotEmpty) {
+            log.add('✓ RSA公钥 ($keyPath)');
+            break;
+          }
         }
-        final preData = jsonDecode(body);
-        final keyData = preData['data'] ?? preData;
-        modulus = keyData['modulus'] ?? keyData['key'] ?? keyData['publicKey'] ?? '';
-        exponentHex = keyData['exponent'] ?? '10001';
-        if (modulus != null && modulus.isNotEmpty) {
-          log.add('✓ 获取RSA公钥成功 ($keyPath)');
-          break;
-        }
-      } catch (e) {
-        log.add('  RSA $keyPath → ${e.toString().length > 60 ? e.toString().substring(0, 60) : e}');
-      }
+      } catch (_) {}
     }
-    if (modulus == null || modulus.isEmpty) log.add('⚠ 未获取到RSA公钥');
+
+    // ── 1.5 从登录页面 HTML 提取 RSA 公钥（新版正方常用方式） ──
+    if (modulus == null || modulus.isEmpty) {
+      try {
+        final pageResp = await http
+            .get(Uri.parse('$_baseUrl/jwglxt/xtgl/login_slogin.html'),
+                headers: _cookiesHeader)
+            .timeout(const Duration(seconds: 8));
+        final html = pageResp.body;
+        // 正方新版：var modulus = '...'; var exponent = '...';
+        // 匹配 modulus='xxx' 或 modulus="xxx"
+        final modMatch = RegExp(r"modulus\s*=\s*'([^']+)'").firstMatch(html) ??
+            RegExp(r'modulus\s*=\s*"([^"]+)"').firstMatch(html);
+        final expMatch = RegExp(r"exponent\s*=\s*'([^']+)'").firstMatch(html) ??
+            RegExp(r'exponent\s*=\s*"([^"]+)"').firstMatch(html);
+        if (modMatch != null) {
+          modulus = modMatch.group(1)!;
+          if (expMatch != null) exponentHex = expMatch.group(1)!;
+          log.add('✓ 从HTML提取RSA公钥');
+        }
+      } catch (_) {}
+    }
+
+    if (modulus == null || modulus.isEmpty) {
+      log.add('⚠ 未获取到RSA公钥，将使用明文密码');
+    }
 
     // ── 2. 加密 ──
     String? encryptedPwd;
     if (modulus != null && modulus.isNotEmpty) {
       try {
         encryptedPwd = _rsaEncrypt(password, modulus, exponentHex);
-        log.add('✓ RSA密码加密完成');
+        log.add('✓ RSA加密完成');
       } catch (e) {
         log.add('✗ RSA加密失败: $e');
       }
     }
 
-    // ── 3. 登录 — 多策略 ──
+    // ── 3. 登录（新版 /jwglxt/ + 旧版 /jwapp/） ──
+    // 新版正方登录接口
     final loginPaths = [
-      '/jwapp/sys/emaphome/login.do',
-      '/jwapp/sys/emaphome/login',
-      '/jwapp/sys/login',
+      ('/jwglxt/xtgl/login_slogin.html', 'new-web'),
+      ('/jwapp/sys/emaphome/login.do', 'old-api'),
+      ('/jwapp/sys/emaphome/login', 'old-api'),
     ];
 
-    // 策略 A: JSON + RSA
+    // 策略 A: RSA加密
     if (encryptedPwd != null) {
-      for (final path in loginPaths) {
+      for (final (path, label) in loginPaths) {
         final result = await _tryLogin(
-            path, username, encryptedPwd, 'RSA-JSON', _headers, log);
+            path, label, username, encryptedPwd, true, log);
         if (result != null) {
-          _sessionId = result.sessionId;
           _cookies = result.cookies;
           return true;
         }
       }
     }
 
-    // 策略 B: JSON + 明文
-    for (final path in loginPaths) {
+    // 策略 B: 明文
+    for (final (path, label) in loginPaths) {
       final result = await _tryLogin(
-          path, username, password, '明文-JSON', _headers, log);
+          path, label, username, password, false, log);
       if (result != null) {
-        _sessionId = result.sessionId;
         _cookies = result.cookies;
         return true;
       }
     }
 
-    // 策略 C: form-urlencoded
-    for (final path in loginPaths) {
-      final formHeaders = {
-        ..._headers,
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-      };
-      final formBody =
-          'loginName=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(password)}';
-      final result = await _tryLogin(
-          path, username, formBody, 'Form', formHeaders, log, isRawBody: true);
-      if (result != null) {
-        _sessionId = result.sessionId;
-        _cookies = result.cookies;
-        return true;
-      }
-    }
-
-    // ── 失败，输出日志 ──
     throw Exception('登录失败\n\n${log.join('\n')}');
   }
 
-  /// 尝试一次登录，成功返回 session 信息，失败返回 null
+  /// 获取初始 Session Cookie
+  Future<void> _getInitialSession(List<String> log) async {
+    try {
+      final resp = await http
+          .get(Uri.parse('$_baseUrl/jwglxt/xtgl/login_slogin.html'),
+              headers: _headers)
+          .timeout(const Duration(seconds: 8));
+      final cookies = _extractCookies(resp);
+      if (cookies.isNotEmpty) {
+        _cookies = cookies;
+        log.add('✓ 获取初始Session');
+      }
+    } catch (_) {
+      // 非致命
+    }
+  }
+
+  /// 尝试一次登录
   Future<_LoginResult?> _tryLogin(
     String path,
-    String username,
-    dynamic bodyOrPwd,
     String label,
-    Map<String, String> headers,
-    List<String> log, {
-    bool isRawBody = false,
-  }) async {
-    try {
-      final resp = await http.post(
-        Uri.parse('$_baseUrl$path'),
-        headers: headers,
-        body: isRawBody ? bodyOrPwd : jsonEncode({
-          'loginName': username,
-          'password': bodyOrPwd,
-        }),
-      ).timeout(const Duration(seconds: 12));
-
-      final body = resp.body.trim();
-      final statusCode = resp.statusCode;
-
-      // 302 = CAS 跳转/登录成功
-      if (statusCode == 302) {
-        final loc = resp.headers['location'] ?? '';
-        log.add('  $label $path → HTTP 302${loc.isNotEmpty ? ' → $loc' : ''}');
-        // 尝试从重定向提取 session
-        final cookies = _extractCookies(resp);
-        if (cookies.isNotEmpty) {
-          log.add('✓ $label 登录成功 (302 + cookie)');
-          return _LoginResult(sessionId: '', cookies: cookies);
-        }
-      }
-
-      if (body.isEmpty) {
-        log.add('  $label $path → HTTP $statusCode 空响应');
-        return null;
-      }
-
-      // HTML 响应
-      if (body.startsWith('<')) {
-        final snippet = body.length > 80 ? body.substring(0, 80) : body;
-        log.add('  $label $path → HTTP $statusCode HTML(${snippet.replaceAll('\n', ' ')}...)');
-        return null;
-      }
-
-      // JSON 响应
-      if (body.startsWith('{')) {
-        try {
-          final data = jsonDecode(body);
-          final code = data['code'];
-          final success = code == '0' || code == 0 ||
-              data['success'] == true || data['success'] == 'true';
-
-          if (success) {
-            final cookies = _extractCookies(resp);
-            final jsessionMatch =
-                RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookies);
-            final token = data['data']?['token'] ??
-                data['token'] ??
-                jsessionMatch?.group(1) ??
-                '';
-            log.add('✓ $label 登录成功 ($path)');
-            return _LoginResult(sessionId: token, cookies: cookies);
-          }
-
-          final msg = data['msg'] ?? data['message'] ?? data['error'] ?? '未知错误';
-          log.add('  $label $path → 失败: $msg');
-          return null;
-        } catch (_) {}
-      }
-
-      log.add('  $label $path → HTTP $statusCode 未知格式(${body.length}b)');
-    } catch (e) {
-      final errStr = e.toString();
-      final short = errStr.length > 80 ? '${errStr.substring(0, 80)}...' : errStr;
-      log.add('  $label $path → 异常: $short');
+    String username,
+    String password,
+    bool isEncrypted,
+    List<String> log,
+  ) async {
+    // 新版正方登录需要特殊格式的 body
+    final bodies = <String, dynamic>{};
+    if (label == 'new-web') {
+      // 新版正方 web 登录格式
+      bodies.addAll({
+        'yhm': username,
+        if (isEncrypted) 'mm': password else 'mm': password,
+        'mm': password, // 新版正方字段名是 yhm/mm 或 loginName/password
+      });
     }
+    // 旧版 API 格式
+    final oldBodies = {
+      'loginName': username,
+      'password': password,
+    };
+
+    // 尝试多种 body 格式
+    final bodyVariants = [
+      if (label == 'new-web') bodies,
+      if (label == 'new-web') oldBodies,
+      oldBodies,
+    ];
+
+    for (final body in {...bodyVariants}) {
+      try {
+        final resp = await http.post(
+          Uri.parse('$_baseUrl$path'),
+          headers: _cookiesHeader,
+          body: jsonEncode(body),
+        ).timeout(const Duration(seconds: 12));
+
+        final respBody = resp.body.trim();
+        final code = resp.statusCode;
+
+        // 302 / 重定向 = 成功
+        if (code == 302) {
+          final newCookies = _extractCookies(resp);
+          log.add('✓ $label 登录成功 (HTTP 302)');
+          return _LoginResult(
+            sessionId: _extractToken(resp, ''),
+            cookies: _mergeCookies(_cookies, newCookies),
+          );
+        }
+
+        // JSON 响应
+        if (respBody.startsWith('{')) {
+          try {
+            final data = jsonDecode(respBody);
+            final isSuccess = data['code'] == '0' || data['code'] == 0 ||
+                data['status'] == 'success' || data['success'] == true;
+
+            if (isSuccess) {
+              final newCookies = _extractCookies(resp);
+              final token = _extractToken(resp, data);
+              log.add('✓ $label 登录成功');
+              return _LoginResult(
+                sessionId: token,
+                cookies: _mergeCookies(_cookies, newCookies),
+              );
+            }
+
+            final msg = data['msg'] ?? data['message'] ?? data['error'] ?? '未知错误';
+            log.add('  $label → $msg');
+          } catch (_) {}
+          continue;
+        }
+
+        // HTML 401 = 认证失败
+        if (code == 401) {
+          log.add('  $label → HTTP 401 认证失败（可能是密码错误或接口需要特殊格式）');
+          continue;
+        }
+
+        if (code == 404) {
+          log.add('  $label → HTTP 404 接口不存在');
+          continue;
+        }
+
+        log.add('  $label → HTTP $code (${respBody.length}b)');
+      } catch (e) {
+        final s = e.toString().length > 80
+            ? '${e.toString().substring(0, 80)}...'
+            : e.toString();
+        log.add('  $label → 异常: $s');
+      }
+    }
+
     return null;
   }
 
-  /// 提取所有 Cookie
+  String _extractToken(http.Response resp, dynamic data) {
+    if (data is Map) {
+      return data['data']?['token'] ?? data['token'] ?? data['sessionid'] ?? '';
+    }
+    final cookies = resp.headers['set-cookie'] ?? '';
+    final m = RegExp(r'JSESSIONID=([^;]+)').firstMatch(cookies);
+    return m?.group(1) ?? '';
+  }
+
+  String _mergeCookies(String old, String add) {
+    if (add.isEmpty) return old;
+    if (old.isEmpty) return add;
+    return '$old; $add';
+  }
+
   String _extractCookies(http.Response resp) {
     final cookieHeader = resp.headers['set-cookie'] ?? '';
     if (cookieHeader.isEmpty) return '';
@@ -225,7 +284,7 @@ class SchoolLoginService {
     return cookies.join('; ');
   }
 
-  /// RSA 加密（PKCS1v15，真随机填充）
+  /// RSA 加密（PKCS1v15）
   String _rsaEncrypt(String plaintext, String modulusHex, String exponentHex) {
     final n = BigInt.parse(modulusHex, radix: 16);
     final e = BigInt.parse(exponentHex, radix: 16);
@@ -275,19 +334,23 @@ class SchoolLoginService {
   }
 
   Map<String, String> get _headers => {
-    'Accept': 'application/json, text/javascript, */*; q=0.01',
+    'Accept': 'text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8',
     'Accept-Language': 'zh-CN,zh;q=0.9',
-    'Content-Type': 'application/json; charset=UTF-8',
     'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) '
         'AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
     'X-Requested-With': 'XMLHttpRequest',
     'Origin': _baseUrl,
-    'Referer': '$_baseUrl/jwapp/sys/emaphome/',
+    'Referer': '$_baseUrl/jwglxt/xtgl/login_slogin.html',
+  };
+
+  Map<String, String> get _cookiesHeader => {
+    ..._headers,
+    if (_cookies.isNotEmpty) 'Cookie': _cookies,
   };
 
   /// 抓取课表
   Future<List<Map<String, dynamic>>> fetchSchedule() async {
-    if ((_sessionId == null || _sessionId!.isEmpty) && _cookies.isEmpty) {
+    if (_cookies.isEmpty) {
       throw Exception('未登录，请先调用 login()');
     }
 
@@ -301,28 +364,36 @@ class SchoolLoginService {
       '/jwapp/sys/kcbcxmdl/modules/qxkcp/queryKccxx',
       '/jwapp/sys/kcbcxmdl/modules/qxkccxx/qxkccxx.do',
       '/jwapp/sys/kcbcxmdl/modules/qxkcb/qxkccxx.do',
+      '/jwglxt/kbcx/xskbcx_cxXsKb.html',
     ]) {
       try {
-        final r = await http.post(
-          Uri.parse('$_baseUrl$schedulePath'),
-          headers: {
-            ..._headers,
-            if (_cookies.isNotEmpty) 'Cookie': _cookies,
-          },
-          body: jsonEncode({
-            'XNXQDM': termCode,
-            '*json': '1',
-            'querySetting': jsonEncode([
-              {'name': 'XNXQDM', 'value': termCode, 'linkOpt': 'and', 'builder': 'equal'},
-            ]),
-            '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
-          }),
-        ).timeout(const Duration(seconds: 30));
+        // 新版正方用 GET + 参数，旧版用 POST + JSON
+        http.Response r;
+        if (schedulePath.contains('jwglxt')) {
+          // 新版正方课表查询
+          r = await http.post(
+            Uri.parse('$_baseUrl$schedulePath'),
+            headers: _cookiesHeader,
+            body: 'xnm=${termCode.substring(0, 4)}&xqm=${_termToXqm(termCode)}&kzlx=ck',
+          ).timeout(const Duration(seconds: 30));
+        } else {
+          r = await http.post(
+            Uri.parse('$_baseUrl$schedulePath'),
+            headers: _cookiesHeader,
+            body: jsonEncode({
+              'XNXQDM': termCode,
+              '*json': '1',
+              'querySetting': jsonEncode([
+                {'name': 'XNXQDM', 'value': termCode, 'linkOpt': 'and', 'builder': 'equal'},
+              ]),
+              '*order': '+KCH,+KXH,-SKZC,+SKXQ,+SKJC',
+            }),
+          ).timeout(const Duration(seconds: 30));
+        }
 
         final body = r.body.trim();
         if (body.isEmpty) continue;
         if (body.startsWith('<') || !body.startsWith('{')) continue;
-
         resp = r;
         break;
       } catch (e) {
@@ -332,32 +403,39 @@ class SchoolLoginService {
 
     if (resp == null) {
       final detail = errors.isNotEmpty
-          ? '\n尝试的路径:\n${errors.take(3).map((e) => '  • $e').join('\n')}'
+          ? '\n${errors.take(3).map((e) => '  • $e').join('\n')}'
           : '';
-      throw Exception('获取课表失败，可能会话已过期请重新登录$detail');
-    }
-
-    if (resp.statusCode != 200) {
-      throw Exception('获取课表失败，HTTP ${resp.statusCode}');
+      throw Exception('获取课表失败，可能会话已过期$detail');
     }
 
     final data = jsonDecode(resp.body);
-    final code = data['code'];
-    final success = code == '0' || code == 0 ||
-        data['success'] == true || data['success'] == 'true';
 
-    if (!success && code != null) {
-      final msg = data['msg'] ?? data['message'] ?? '获取课表失败';
-      throw Exception(msg);
-    }
-
-    final rows = data['datas']?['qxkccxx']?['rows'] ??
+    // 新版正方响应格式
+    var rows = data['datas']?['qxkccxx']?['rows'] ??
         data['data']?['rows'] ??
         data['datas']?['rows'] ??
-        data['rows'];
+        data['rows'] ??
+        data;
 
-    if (rows == null) return [];
-    return (rows as List).cast<Map<String, dynamic>>();
+    // 如果是 List 直接就是课表数据
+    if (rows is List) return rows.cast<Map<String, dynamic>>();
+    return [];
+  }
+
+  String _termToXqm(String termCode) {
+    // termCode like "2025-2026-2" → xqm = "3" for second semester
+    // or "12" depending on system
+    final parts = termCode.split('-');
+    if (parts.length >= 3) {
+      final sem = parts[2];
+      // 新版正方: 1="3"(上学期), 2="12"(下学期), 3="16"(暑假)
+      switch (sem) {
+        case '1': return '3';
+        case '2': return '12';
+        case '3': return '16';
+      }
+    }
+    return '12'; // default to semester 2
   }
 
   Future<String> _getCurrentTerm() async {
@@ -365,15 +443,12 @@ class SchoolLoginService {
       '/jwapp/sys/emaphome/getQXQDMCurrent.do',
       '/jwapp/sys/emaphome/getQXQDMCurrent',
       '/jwapp/sys/emaphome/getCurrentTerm',
+      '/jwglxt/xtgl/index_initMenu.html',
     ]) {
       try {
-        final resp = await http.get(
-          Uri.parse('$_baseUrl$termPath'),
-          headers: {
-            ..._headers,
-            if (_cookies.isNotEmpty) 'Cookie': _cookies,
-          },
-        ).timeout(const Duration(seconds: 10));
+        final resp = await http
+            .get(Uri.parse('$_baseUrl$termPath'), headers: _cookiesHeader)
+            .timeout(const Duration(seconds: 10));
         final body = resp.body.trim();
         if (!body.startsWith('{')) continue;
         final data = jsonDecode(body);
@@ -393,12 +468,10 @@ class _LoginResult {
   const _LoginResult({required this.sessionId, required this.cookies});
 }
 
-/// 从 SKJC 字段（如 "5-6节"）解析起始和结束节次
+/// 从 SKJC 字段解析节次
 (int start, int end) parseSectionRange(String skjc) {
   final match = RegExp(r'(\d+)-(\d+)节').firstMatch(skjc);
-  if (match != null) {
-    return (int.parse(match.group(1)!), int.parse(match.group(2)!));
-  }
+  if (match != null) return (int.parse(match.group(1)!), int.parse(match.group(2)!));
   final single = RegExp(r'(\d+)节').firstMatch(skjc);
   if (single != null) {
     final s = int.parse(single.group(1)!);
@@ -407,31 +480,19 @@ class _LoginResult {
   return (1, 2);
 }
 
-/// 从 SKZC 字段（如 "2-16周(双)"）解析周次信息
+/// 从 SKZC 字段解析周次
 ({String startWeek, String endWeek, bool? isOddWeek}) parseWeekInfo(String skzc) {
   final oddMatch = RegExp(r'(\d+)-(\d+)周\(单\)').firstMatch(skzc);
   if (oddMatch != null) {
-    return (
-      startWeek: oddMatch.group(1)!,
-      endWeek: oddMatch.group(2)!,
-      isOddWeek: true,
-    );
+    return (startWeek: oddMatch.group(1)!, endWeek: oddMatch.group(2)!, isOddWeek: true);
   }
   final evenMatch = RegExp(r'(\d+)-(\d+)周\(双\)').firstMatch(skzc);
   if (evenMatch != null) {
-    return (
-      startWeek: evenMatch.group(1)!,
-      endWeek: evenMatch.group(2)!,
-      isOddWeek: false,
-    );
+    return (startWeek: evenMatch.group(1)!, endWeek: evenMatch.group(2)!, isOddWeek: false);
   }
   final rangeMatch = RegExp(r'(\d+)-(\d+)周').firstMatch(skzc);
   if (rangeMatch != null) {
-    return (
-      startWeek: rangeMatch.group(1)!,
-      endWeek: rangeMatch.group(2)!,
-      isOddWeek: null,
-    );
+    return (startWeek: rangeMatch.group(1)!, endWeek: rangeMatch.group(2)!, isOddWeek: null);
   }
   final singleMatch = RegExp(r'(\d+)周').firstMatch(skzc);
   if (singleMatch != null) {
