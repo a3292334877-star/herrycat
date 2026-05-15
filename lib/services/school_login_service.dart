@@ -169,48 +169,61 @@ class SchoolLoginService {
     final now = DateTime.now();
     final year = now.year - (now.month < 9 ? 1 : 0);
     final xqm = (now.month >= 2 && now.month <= 7) ? '12' : '3';
+    final scheduleUrl = '$_baseUrl$_schedule';
 
-    final bodies = [
+    // 先访问菜单页建立上下文
+    try {
+      final mr = await http.get(
+        Uri.parse('$_baseUrl/jwglxt/xtgl/index_initMenu.html'),
+        headers: _cookieHeaders,
+      ).timeout(const Duration(seconds: 5));
+      final nc = _extractCookies(mr);
+      if (nc.isNotEmpty) _cookies = _mergeCookies(_cookies, nc);
+      log.add('menu: ${mr.statusCode}');
+    } catch (e) {
+      log.add('menu: $e');
+    }
+
+    // 多种参数+GET/POST
+    final params = [
       'xnm=$year&xqm=$xqm&kzlx=ck',
       'xnm=$year&xqm=$xqm',
-      jsonEncode({'xnm': year.toString(), 'xqm': xqm}),
-      jsonEncode({'XNXQDM': '$year-${year+1}-${xqm == "3" ? "1" : "2"}'}),
     ];
 
-    for (final body in bodies) {
-      final isJson = body.startsWith('{');
-      try {
-        final r = await http.post(
-          Uri.parse('$_baseUrl$_schedule'),
-          headers: {
-            ..._cookieHeaders,
-            'Content-Type': isJson
-                ? 'application/json'
-                : 'application/x-www-form-urlencoded',
-            'Referer': '$_baseUrl/jwglxt/xtgl/index_initMenu.html',
-          },
-          body: body,
-        ).timeout(const Duration(seconds: 8));
+    for (final body in params) {
+      for (final useGet in [false, true]) {
+        try {
+          final r = useGet
+              ? await http.get(
+                  Uri.parse('$scheduleUrl?$body'),
+                  headers: _cookieHeaders,
+                ).timeout(const Duration(seconds: 8))
+              : await http.post(
+                  Uri.parse(scheduleUrl),
+                  headers: {
+                    ..._cookieHeaders,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Referer': '$_baseUrl/jwglxt/xtgl/index_initMenu.html',
+                  },
+                  body: body,
+                ).timeout(const Duration(seconds: 8));
 
-        final respBody = r.body.trim();
-        if (respBody.isEmpty) { log.add('  → 空响应'); continue; }
-        if (!respBody.startsWith('{')) {
-          log.add('  → HTML(${respBody.length}b)');
-          continue;
+          final b = r.body.trim();
+          if (b.isEmpty) { log.add('${useGet ? "GET" : "POST"} $body → 空'); continue; }
+          if (!b.startsWith('{')) {
+            log.add('${useGet ? "GET" : "POST"} $body → HTML(${b.length}b)');
+            continue;
+          }
+          final data = jsonDecode(b);
+          final rows = data['kbList'] ??
+              data['datas']?['kbList'] ??
+              data['datas']?['qxkccxx']?['rows'] ??
+              data['rows'];
+          if (rows is List && rows.isNotEmpty) return rows.cast<Map<String, dynamic>>();
+          log.add('$body → JSON无数据');
+        } catch (e) {
+          log.add('$body → $e');
         }
-
-        final data = jsonDecode(respBody);
-        // 新版正方: { kbList: [...], ... }
-        final rows = data['kbList'] ??
-            data['datas']?['kbList'] ??
-            data['datas']?['qxkccxx']?['rows'] ??
-            data['rows'];
-        if (rows is List && rows.isNotEmpty) {
-          return rows.cast<Map<String, dynamic>>();
-        }
-        log.add('  → JSON无数据');
-      } catch (e) {
-        log.add('  → $e');
       }
     }
 
