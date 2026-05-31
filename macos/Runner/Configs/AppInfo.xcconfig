@@ -5,10 +5,10 @@
 // 'flutter create' template.
 
 // The application's name. By default this is also the title of the Flutter window.
-PRODUCT_NAME = herrycat
+PRODUCT_NAME = Henrycat
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.herrycat.herrycat
+PRODUCT_BUNDLE_IDENTIFIER = com.henrycat.henrycat
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.herrycat. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 com.henrycat. All rights reserved.

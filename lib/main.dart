@@ -4,176 +4,84 @@ import 'providers/course_provider.dart';
 import 'providers/settings_provider.dart';
 import 'screens/home_screen.dart';
 import 'screens/add_course_screen.dart';
-import 'screens/course_detail_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/statistics_screen.dart';
+import 'screens/about_screen.dart';
 import 'screens/import_schedule_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final courseProvider = CourseProvider();
   final settingsProvider = SettingsProvider();
-  await settingsProvider.loadSettings();
-  runApp(HenrycatApp(settingsProvider: settingsProvider));
+  await courseProvider.init();
+  await settingsProvider.init();
+  runApp(HenrycatApp(
+    courseProvider: courseProvider,
+    settingsProvider: settingsProvider,
+  ));
 }
 
 class HenrycatApp extends StatelessWidget {
+  final CourseProvider courseProvider;
   final SettingsProvider settingsProvider;
 
-  const HenrycatApp({super.key, required this.settingsProvider});
+  const HenrycatApp({
+    super.key,
+    required this.courseProvider,
+    required this.settingsProvider,
+  });
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider.value(value: courseProvider),
         ChangeNotifierProvider.value(value: settingsProvider),
-        ChangeNotifierProvider(create: (_) => CourseProvider()..loadCourses()),
       ],
       child: Consumer<SettingsProvider>(
-        builder: (context, settings, child) {
-          return MaterialApp(
-            title: 'Henrycat',
-            debugShowCheckedModeBanner: false,
-            themeMode: settings.themeMode,
-            theme: ThemeData(
-              useMaterial3: true,
-              brightness: Brightness.light,
-              scaffoldBackgroundColor: const Color(0xFFF5F5F5),
-              colorScheme: const ColorScheme.light(
-                primary: Color(0xFF5B9BF5),
-                secondary: Color(0xFFFF7B9C),
-                surface: Colors.white,
-                onSurface: Colors.black87,
-                onPrimary: Colors.white,
-              ),
-              cardTheme: CardTheme(
-                color: Colors.white,
-                elevation: 1,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              appBarTheme: const AppBarTheme(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black87,
-                elevation: 0,
-                scrolledUnderElevation: 1,
-              ),
-              floatingActionButtonTheme: const FloatingActionButtonThemeData(
-                backgroundColor: Color(0xFF5B9BF5),
-                foregroundColor: Colors.white,
-              ),
-              inputDecorationTheme: InputDecorationTheme(
-                filled: true,
-                fillColor: Colors.grey[100],
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFF5B9BF5), width: 1.5),
-                ),
-              ),
-              snackBarTheme: SnackBarThemeData(
-                backgroundColor: Colors.grey[800],
-                contentTextStyle: const TextStyle(color: Colors.white),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                behavior: SnackBarBehavior.floating,
-              ),
-              dialogTheme: DialogTheme(
-                backgroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              ),
-              switchTheme: SwitchThemeData(
-                thumbColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return const Color(0xFF5B9BF5);
-                  }
-                  return Colors.grey;
-                }),
-                trackColor: WidgetStateProperty.resolveWith((states) {
-                  if (states.contains(WidgetState.selected)) {
-                    return const Color(0xFF5B9BF5).withOpacity(0.5);
-                  }
-                  return Colors.grey.withOpacity(0.3);
-                }),
-              ),
-              tabBarTheme: TabBarTheme(
-                labelColor: Colors.black87,
-                unselectedLabelColor: Colors.grey[600],
-                indicatorColor: const Color(0xFF5B9BF5),
-                dividerColor: Colors.transparent,
+        builder: (context, settings, _) => MaterialApp(
+          title: 'Henrycat',
+          debugShowCheckedModeBanner: false,
+          themeMode: settings.themeMode,
+          theme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.light,
+            colorSchemeSeed: const Color(0xFF5B9BF5),
+            cardTheme: CardThemeData(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            darkTheme: ThemeData(
-              useMaterial3: true,
-              brightness: Brightness.dark,
-              scaffoldBackgroundColor: const Color(0xFF1C1E21),
-              colorScheme: const ColorScheme.dark(
-                primary: Color(0xFF5B9BF5),
-                secondary: Color(0xFFFF7B9C),
-                surface: Color(0xFF2C2E33),
-                onSurface: Colors.white,
-                onPrimary: Colors.white,
-              ),
-              cardTheme: CardTheme(
-                color: const Color(0xFF2C2E33),
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16),
-                ),
-              ),
-              appBarTheme: const AppBarTheme(
-                backgroundColor: Color(0xFF1C1E21),
-                foregroundColor: Colors.white,
-                elevation: 0,
-                scrolledUnderElevation: 0,
-              ),
-              floatingActionButtonTheme: const FloatingActionButtonThemeData(
-                backgroundColor: Color(0xFF5B9BF5),
-                foregroundColor: Colors.white,
-              ),
-              inputDecorationTheme: InputDecorationTheme(
-                filled: true,
-                fillColor: const Color(0xFF2C2E33),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: BorderSide.none,
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(16),
-                  borderSide: const BorderSide(color: Color(0xFF5B9BF5), width: 1.5),
-                ),
-              ),
-              snackBarTheme: SnackBarThemeData(
-                backgroundColor: const Color(0xFF2C2E33),
-                contentTextStyle: const TextStyle(color: Colors.white),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                behavior: SnackBarBehavior.floating,
-              ),
-              dialogTheme: DialogTheme(
-                backgroundColor: const Color(0xFF2C2E33),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            appBarTheme: const AppBarTheme(
+              centerTitle: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+            ),
+          ),
+          darkTheme: ThemeData(
+            useMaterial3: true,
+            brightness: Brightness.dark,
+            colorSchemeSeed: const Color(0xFF5B9BF5),
+            cardTheme: CardThemeData(
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
             ),
-            home: const HomeScreen(),
-            routes: {
-              '/add': (context) => const AddCourseScreen(),
-              '/detail': (context) => const CourseDetailScreen(),
-              '/settings': (context) => const SettingsScreen(),
-              '/statistics': (context) => const StatisticsScreen(),
-              '/import': (context) => const ImportScheduleScreen(),
-            },
-          );
-        },
+            appBarTheme: const AppBarTheme(
+              centerTitle: true,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+            ),
+          ),
+          home: const HomeScreen(),
+          routes: {
+            '/add': (_) => const AddCourseScreen(),
+            '/settings': (_) => const SettingsScreen(),
+            '/about': (_) => const AboutScreen(),
+            '/import': (_) => const ImportScheduleScreen(),
+          },
+        ),
       ),
     );
   }

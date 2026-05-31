@@ -1,4 +1,4 @@
-# herrycat
+# Henrycat
 
 A new Flutter project.
 

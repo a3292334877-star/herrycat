@@ -1,146 +1,88 @@
-import 'package:flutter/material.dart';
-
-/// 周类型：全部周、单周、双周
-enum WeekCycle {
-  all,   // 全部周
-  odd,   // 单周
-  even,  // 双周
-}
-
-/// 课程性质
-enum CourseNature {
-  required,  // 必修
-  elective,  // 选修
-  public,    // 公选
-}
+enum WeekCycle { all, odd, even }
 
 class Course {
   final String id;
   final String name;
   final String teacher;
-  final int dayOfWeek;
-  final String startTime;
-  final String endTime;
+  final int dayOfWeek; // 1-7 周一到周日
+  final int startPeriod; // 起始节次 1-13
+  final int endPeriod; // 结束节次
   final String location;
-  final Color color;
+  final int colorIndex;
   final WeekCycle weekCycle;
-  final CourseNature nature;     // 必修/选修/公选
-  final double credits;          // 学分
-  final String weekRange;        // 周数范围，如 "1-16周"
+  final String note; // 备注
+
+  static const List<String> dayNames = [
+    '一', '二', '三', '四', '五', '六', '日'
+  ];
+
+  static const List<String> periodLabels = [
+    '08:00', '08:55', '10:00', '10:55', '11:50',
+    '14:00', '14:55', '16:00', '16:55', '17:50',
+    '19:00', '19:55', '20:50',
+  ];
+
+  static const List<int> colors = [
+    0xFF5B9BF5, // 蓝
+    0xFFFF7B7B, // 珊瑚红
+    0xFF4CD964, // 绿
+    0xFFFF9500, // 橙
+    0xFFAF52DE, // 紫
+    0xFFFFCC00, // 金
+    0xFF34C759, // 薄荷
+    0xFFFF6482, // 桃红
+    0xFF00C7BE, // 青
+    0xFFA2845E, // 棕色
+  ];
 
   Course({
     required this.id,
     required this.name,
-    required this.teacher,
+    this.teacher = '',
     required this.dayOfWeek,
-    required this.startTime,
-    required this.endTime,
-    required this.location,
-    required this.color,
+    required this.startPeriod,
+    required this.endPeriod,
+    this.location = '',
+    this.colorIndex = 0,
     this.weekCycle = WeekCycle.all,
-    this.nature = CourseNature.required,
-    this.credits = 0.0,
-    this.weekRange = '1-16周',
+    this.note = '',
   });
 
-  String get natureLabel {
-    switch (nature) {
-      case CourseNature.required:
-        return '必修';
-      case CourseNature.elective:
-        return '选修';
-      case CourseNature.public:
-        return '公选';
-    }
-  }
+  String get dayLabel => '周${dayNames[dayOfWeek - 1]}';
+  int get duration => endPeriod - startPeriod + 1;
+  String get timeSlot => '${periodLabels[startPeriod - 1]}-${periodLabels[endPeriod - 1]}';
+  String get weekCycleLabel => weekCycle == WeekCycle.all ? '' : (weekCycle == WeekCycle.odd ? '【单】' : '【双】');
+  String get fullName => '$name${weekCycleLabel.isNotEmpty ? ' $weekCycleLabel' : ''}';
 
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'name': name,
-      'teacher': teacher,
-      'dayOfWeek': dayOfWeek,
-      'startTime': startTime,
-      'endTime': endTime,
-      'location': location,
-      'color': color.value,
-      'weekCycle': weekCycle.index,
-      'nature': nature.index,
-      'credits': credits,
-      'weekRange': weekRange,
-    };
-  }
-
-  factory Course.fromMap(Map<String, dynamic> map) {
-    return Course(
-      id: map['id'],
-      name: map['name'],
-      teacher: map['teacher'] ?? '',
-      dayOfWeek: map['dayOfWeek'],
-      startTime: map['startTime'],
-      endTime: map['endTime'],
-      location: map['location'] ?? '',
-      color: Color(map['color'] ?? 0xFF5B9BF5),
-      weekCycle: WeekCycle.values[map['weekCycle'] ?? 0],
-      nature: CourseNature.values[map['nature'] ?? 0],
-      credits: (map['credits'] ?? 0.0).toDouble(),
-      weekRange: map['weekRange'] ?? '1-16周',
-    );
-  }
-
-  Course copyWith({
-    String? id,
-    String? name,
-    String? teacher,
-    int? dayOfWeek,
-    String? startTime,
-    String? endTime,
-    String? location,
-    Color? color,
-    WeekCycle? weekCycle,
-    CourseNature? nature,
-    double? credits,
-    String? weekRange,
-  }) {
-    return Course(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      teacher: teacher ?? this.teacher,
-      dayOfWeek: dayOfWeek ?? this.dayOfWeek,
-      startTime: startTime ?? this.startTime,
-      endTime: endTime ?? this.endTime,
-      location: location ?? this.location,
-      color: color ?? this.color,
-      weekCycle: weekCycle ?? this.weekCycle,
-      nature: nature ?? this.nature,
-      credits: credits ?? this.credits,
-      weekRange: weekRange ?? this.weekRange,
-    );
-  }
-
-  String get dayName {
-    const days = ['', '周一', '周二', '周三', '周四', '周五', '周六', '周日'];
-    return days[dayOfWeek];
-  }
-
-  String get timeSlot => '$startTime - $endTime';
-
-  String get weekCycleLabel {
-    switch (weekCycle) {
-      case WeekCycle.all:
-        return '全周';
-      case WeekCycle.odd:
-        return '单周';
-      case WeekCycle.even:
-        return '双周';
-    }
-  }
-
-  /// 判断某周次（从1开始）是否应该显示这门课
-  bool shouldShowInWeek(int weekNum) {
+  bool shouldShowInWeek(int week) {
     if (weekCycle == WeekCycle.all) return true;
-    if (weekCycle == WeekCycle.odd) return weekNum % 2 == 1;
-    if (weekCycle == WeekCycle.even) return weekNum % 2 == 0;
-    return true;
+    if (weekCycle == WeekCycle.odd) return week % 2 == 1;
+    return week % 2 == 0;
   }
+
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'name': name,
+        'teacher': teacher,
+        'dayOfWeek': dayOfWeek,
+        'startPeriod': startPeriod,
+        'endPeriod': endPeriod,
+        'location': location,
+        'colorIndex': colorIndex,
+        'weekCycle': weekCycle.index,
+        'note': note,
+      };
+
+  factory Course.fromMap(Map<String, dynamic> m) => Course(
+        id: m['id'],
+        name: m['name'],
+        teacher: m['teacher'] ?? '',
+        dayOfWeek: m['dayOfWeek'],
+        startPeriod: m['startPeriod'],
+        endPeriod: m['endPeriod'],
+        location: m['location'] ?? '',
+        colorIndex: m['colorIndex'] ?? 0,
+        weekCycle: WeekCycle.values[m['weekCycle'] ?? 0],
+        note: m['note'] ?? '',
+      );
 }
